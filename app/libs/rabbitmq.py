@@ -142,11 +142,11 @@ class Consumer(threading.Thread):
                     params = self.zbx.sync_host(eqm_device, zbx_device)
             elif task['action'] == 'delete':
                 result = self.zbx.delete_host(eqm_device['hostid'])
-                logger.info(u'{0} removed'.format(eqm_device['host']))
+                logger.info('{0} removed'.format(eqm_device['host']))
         except ZapiAttrException as e:
-            logger.debug(u'{0} {1}'.format(eqm_device['host'], repr(e)))
+            logger.debug('{0} {1}'.format(eqm_device['host'], repr(e)))
         except Exception as e:
-            logger.error(u'{0} {1}'.format(eqm_device['host'], repr(e)))
+            logger.error('{0} {1}'.format(eqm_device['host'], repr(e)))
             task['attempt'] += 1
             if task['attempt'] <= RABBITMQ_ATTEMPTS:
                 self.channel.basic_publish(

@@ -1,18 +1,30 @@
 import os
-PATH = os.path.dirname(os.path.abspath(__file__))
-
-# Configuration of application
-# Logging:
-LOG_FILE = '/tmp/zbxsyncer.log'
-LOG_FORMAT = '%(asctime)s - %(levelname)s - %(message)s'
-LOG_LEVEL = 'INFO'
-# Flask Application:
-APP_SECRET_KEY = 'zbxsyncer'
-APP_HOST = '0.0.0.0'
-APP_DEBUG = False
-APP_THREADED = True
-APP_PORT = 5001
-# Environment:
+# Application version
+VERSION = 0.1
+# Statement for enabling the development environment
+DEBUG = True
+# Define the application directory
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+TMP_DIR = os.path.join(BASE_DIR, 'tmp')
+# Define the application log
+LOG_FILENAME = os.path.join(TMP_DIR, 'app.log')
+LOG_FORMAT = "%(asctime)s {%(module)s:%(lineno)d} %(levelname)s - %(message)s"
+LOG_LEVEL = 'DEBUG'
+# Define the application settings filename
+SETTING_FILENAME = os.path.join(BASE_DIR, 'app', 'settings.xml')
+# Application threads. A common general assumption is
+# using 2 per available processor cores - to handle
+# incoming requests using one and performing background
+# operations using the other.
+THREADS_PER_PAGE = 5
+# Enable protection agains *Cross-site Request Forgery (CSRF)*
+CSRF_ENABLED = True
+# Use a secure, unique and absolutely secret key for
+# signing the data.
+CSRF_SESSION_KEY = "zbxsyncer"
+# Secret key for signing cookies
+SECRET_KEY = "zbxsyncer"
+# Environment
 ENV = {
     'NLS_LANG': '.UTF8',
     'LD_LIBRARY_PATH': '/usr/lib/oracle/12.1/client64/lib',
@@ -26,11 +38,11 @@ RABBITMQ_QUEUE = 'zbxsyncer'
 RABBITMQ_ERRDELAY = 5
 RABBITMQ_ATTEMPTS = 3
 CONSUMERS_COUNT = 4
-TEMP_FILE_DIR = PATH + '/var'
-#ZabbixAPI configuration:
-ZABBIX_URL = 'https://zabbix.local.net'
-ZABBIX_USER = 'zbxsyncer'
-ZABBIX_PASS = 'zbxsyncer'
+TEMP_FILE_DIR = BASE_DIR + '/var'
+# ZabbixAPI configuration
+ZABBIX_URL = 'https://zabbix.enforta.net'
+ZABBIX_USER = 'admin'
+ZABBIX_PASS = 'yzv.yj,fyuf'
 MONITORING_ICMP = '2102'
 MONITORING_ADVANCED = '2103'
 MONITORING_DISABLED = '2101'
@@ -43,16 +55,16 @@ DEFAULT_TEMPLATEIDS = {
     'breezemaxcpe': [],
 }
 DEFAULT_MACROSES = [
-    { 'macro': '{$SNMP_COMMUNITY}', 'value': 'public' },
+    { 'macro': '{$SNMP_COMMUNITY}', 'value': 'engforta' },
     { 'macro': '{$ICMP_PING_LOSS_LIMIT}', 'value': 10 },
     { 'macro': '{$ICMP_PING_RESPONSE_LIMIT}', 'value': 0.15 },
 ]
-# Oracle configuration:
-ORA_USER = 'user'
-ORA_PASS = 'pass'
-ORA_HOST = '192.168.0.1'
+# Oracle configuration
+ORA_USER = 'os_sys'
+ORA_PASS = 'os_sys'
+ORA_HOST = '192.168.66.38'
 ORA_PORT = '1521'
-ORA_SID  = 'sid'
+ORA_SID  = 'orange'
 SQL_SELECT_DEVICES = """
 select
     da.device_id as host, d.device_type,
@@ -79,3 +91,7 @@ where
     na.is_management = 1
     {0}
 """
+# Define the database - we are working with
+SQLALCHEMY_DATABASE_URI = 'oracle://%s:%s@%s:%s/%s' % (ORA_USER, ORA_PASS, ORA_HOST, ORA_PORT, ORA_SID)
+SQLALCHEMY_TRACK_MODIFICATIONS = False
+DATABASE_CONNECT_OPTIONS = {}
