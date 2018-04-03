@@ -40,9 +40,9 @@ RABBITMQ_ATTEMPTS = 3
 CONSUMERS_COUNT = 4
 TEMP_FILE_DIR = BASE_DIR + '/var'
 # ZabbixAPI configuration
-ZABBIX_URL = 'https://zabbix.enforta.net'
-ZABBIX_USER = 'admin'
-ZABBIX_PASS = 'yzv.yj,fyuf'
+ZABBIX_URL = ''
+ZABBIX_USER = ''
+ZABBIX_PASS = ''
 MONITORING_ICMP = '2102'
 MONITORING_ADVANCED = '2103'
 MONITORING_DISABLED = '2101'
@@ -55,16 +55,16 @@ DEFAULT_TEMPLATEIDS = {
     'breezemaxcpe': [],
 }
 DEFAULT_MACROSES = [
-    { 'macro': '{$SNMP_COMMUNITY}', 'value': 'engforta' },
+    { 'macro': '{$SNMP_COMMUNITY}', 'value': '' },
     { 'macro': '{$ICMP_PING_LOSS_LIMIT}', 'value': 10 },
     { 'macro': '{$ICMP_PING_RESPONSE_LIMIT}', 'value': 0.15 },
 ]
 # Oracle configuration
-ORA_USER = 'os_sys'
-ORA_PASS = 'os_sys'
-ORA_HOST = '192.168.66.38'
+ORA_USER = ''
+ORA_PASS = ''
+ORA_HOST = ''
 ORA_PORT = '1521'
-ORA_SID  = 'orange'
+ORA_SID  = ''
 SQL_SELECT_DEVICES = """
 select
     da.device_id as host, d.device_type,
