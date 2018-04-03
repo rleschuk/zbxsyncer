@@ -117,7 +117,8 @@ class Consumer(threading.Thread):
                 while self.do:
                     self.connection.process_data_events()
                     time.sleep(0.1)
-            except Exception:
+            except Exception as err:
+                app.logger.error('%s error: %s' % (self.getName(), repr(err)))
                 self.reconnect()
 
     def shutdown(self):
@@ -126,7 +127,7 @@ class Consumer(threading.Thread):
         app.logger.info('%s has been shut down' % self.getName())
 
     def callback(self, ch, method, properties, body):
-        task = json.loads(body)
+        task = json.loads(body.decode('utf8'))
         try:
             eqm_device = task['data']
             if task['action'] == 'sync':

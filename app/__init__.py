@@ -60,7 +60,7 @@ for index in range(app.config['CONSUMERS_COUNT']):
     app.consumers[index].start()
 
 def sync_all():
-    import time, re
+    import time, re, json
     publisher = Publisher()
     if publisher.is_zero_queue():
         timestamp = int(time.time())
@@ -100,12 +100,12 @@ def check_proxy_status():
 setattr(app, 'scheduler', BackgroundScheduler())
 app.scheduler.add_job(
     func=sync_all,
-    trigger=CronTrigger(hour='*/2'),
-    #trigger=CronTrigger(minute='*/5'),
+    trigger=CronTrigger(hour='*/2', minute='5'),
     id='sync_all',
     name='sync_all',
     replace_existing=True
 )
+#sync_all()
 app.logger.info('scheduler add job sync_all')
 app.scheduler.add_job(
     func=check_proxy_status,
