@@ -1,0 +1,626 @@
+{% extends 'layout.html' %}
+{% block title %}Отчет по загрузке секторов БС{% endblock %}
+{% block body %}
+<div class="row">
+  <div class="col">
+    <div class="card">
+      <div class="card-header" role="tab" id="headingFilter">
+        <h5 class="mb-0">
+          <a data-toggle="collapse" href="#collapseFilter" aria-expanded="true" aria-controls="collapseFilter">
+            Отчет по загрузке секторов БС
+          </a>
+        </h5>
+      </div>
+      <div id="collapseFilter" class="collapse show" role="tabpanel" aria-labelledby="headingFilter">
+        <div class="card-block">
+          <div class="row" >
+            <div class="col">
+              <div class="device-groups-div">
+                <ul id="root" class="device-group-ul-root"></ul>
+              </div>
+            </div>
+            <div class="col">
+              <div class="form-group row">
+                <label for="start-date-input" class="col-3 col-form-label">Начало периода</label>
+                <div class="col-9">
+                  <input class="form-control" type="date" value="{{ (datetime.today()-timedelta(days=1)).strftime('%Y-%m-%d') }}" id="start-date-input">
+                </div>
+              </div>
+              <div class="form-group row">
+                <label for="stop-datetime-local-input" class="col-3 col-form-label">Конец периода</label>
+                <div class="col-9">
+                  <input class="form-control" type="date" value="{{ datetime.today().strftime('%Y-%m-%d') }}" id="stop-date-input">
+                </div>
+              </div>
+              <div class="form-group row">
+                <div class="col-3"></div>
+                <div class="col-9">
+                  <div class="form-check">
+                    <label class="form-check-label">
+                      <input class="form-check-input" id="workonly" type="checkbox">&nbsp;&nbsp;Фильтр по времени:
+                    </label>
+                  </div>
+                  <div class="row">
+                    <div class="col">
+                      <select multiple class="form-control" id="weekdays">
+                        <option value="1" selected>Понедельник</option>
+                        <option value="2" selected>Вторник</option>
+                        <option value="3" selected>Среда</option>
+                        <option value="4" selected>Четверг</option>
+                        <option value="5" selected>Пятница</option>
+                        <option value="6">Суббота</option>
+                        <option value="7">Воскресение</option>
+                      </select>
+                    </div>
+                    <div class="col">
+                      <div class="form-group row">
+                        <label for="from_hour" class="col-4 col-form-label">с: </label>
+                        <div class="col-7">
+                          <select class="form-control" id="from_hour">
+                            <option value="0">00:00</option>
+                            <option value="3">03:00</option>
+                            <option value="6">06:00</option>
+                            <option selected value="9">09:00</option>
+                            <option value="12">12:00</option>
+                            <option value="15">15:00</option>
+                            <option value="18">18:00</option>
+                            <option value="21">21:00</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="form-group row">
+                        <label for="till_hour" class="col-4 col-form-label">до: </label>
+                        <div class="col-7">
+                          <select class="form-control" id="till_hour">
+                            <option value="3">02:59</option>
+                            <option value="6">05:59</option>
+                            <option value="9">08:59</option>
+                            <option value="12">11:59</option>
+                            <option value="15">14:59</option>
+                            <option selected value="18">17:59</option>
+                            <option value="21">20:59</option>
+                            <option value="24">23:59</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div class="form-group row">
+                        <label for="offset" class="col-4 col-form-label right">смещение: </label>
+                        <div class="col-7">
+                          <select class="form-control" id="offset">
+                            <option value="-3600">GMT+2</option>
+                            <option selected value="0">GMT+3</option>
+                            <option value="3600">GMT+4</option>
+                            <option value="7200">GMT+5</option>
+                            <option value="10800">GMT+6</option>
+                            <option value="14400">GMT+7</option>
+                            <option value="18000">GMT+8</option>
+                            <option value="21600">GMT+9</option>
+                            <option value="25200">GMT+10</option>
+                            <option value="28800">GMT+11</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <br>
+              <div class="form-group row">
+                <label for="l_cpeutil-number-input" class="col-3 col-form-label">Порог по кол-ву CPE, %</label>
+                <div class="col-9">
+                  <input class="form-control" type="number" value="75" id="l_cpeutil">
+                </div>
+              </div>
+              <div class="form-group row">
+                <label for="l_util-number-input" class="col-3 col-form-label">Порог по утилизации, %</label>
+                <div class="col-9">
+                  <input class="form-control" type="number" value="75" id="l_util">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="text-center">
+          <button onclick="getDevices();" type="button" class="btn btn-success">Сформировать отчет</button>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+<br>
+<div class="row collapse" id="progress">
+  <div class="col">
+    <p class="text-center">идет формирование отчета&hellip; <b id="progress-percent">0%</b></p>
+    <div class="progress">
+      <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" aria-valuenow="50" aria-valuemin="0" aria-valuemax="100" style="width: 50%; height: 30px;"></div>
+    </div>
+  </div>
+</div>
+<br>
+<div class="row" id="table">
+  <div class="col">
+    <table id="devices" class="table table-hover" cellspacing="0" width="100%">
+      <thead>
+        <tr>
+          <td>#</td>
+          <td>id</td>
+          <td>Регион</td>
+          <td>Город</td>
+          <td>Объект</td>
+          <td>Наименование устройства</td>
+          <td>Тип устройства</td>
+          <td>IP устройства</td>
+          <td>Доступность SNMP</td>
+          <td>Ошибки</td>
+          <td>Частота</td>
+          <td>Ширина полосы</td>
+          <td>Кол-во CPE, расчетное</td>
+          <td>Кол-во CPE, среднее</td>
+          <td>Утил. CPE, %</td>
+          <td>Расчетная нагрузка, Mbps</td>
+          <td>Средняя нагрузка по UL, Mbps</td>
+          <td>Макс. нагрузка по UL, Mbps</td>
+          <td>Средняя нагрузка по DL, Mbps</td>
+          <td>Макс. нагрузка по DL, Mbps</td>
+          <td>Утил. по UL, %</td>
+          <td>Макс. утил. по UL, %</td>
+          <td>Утил. по DL, %</td>
+          <td>Макс. утил. по DL, %</td>
+          <td>Утил. по ULDL, %</td>
+          <td>Макс. утил. по ULDL, %</td>
+          <td></td>
+        </tr>
+      </thead>
+      <tbody ></tbody>
+    </table>
+  </div>
+</div>
+<br><br><br>
+<script type="text/javascript">
+  function addItem(parentUL, branch, parentId) {
+      for (var key in branch.children) {
+        //console.log(branch.children[key]);
+          var item = branch.children[key];
+          $item = $('<li>', {
+              id: item.id,
+              class: "device-group-li"
+          });
+          $item.append($('<input>', {
+              type: "checkbox",
+              id: item.id,
+              name: item.id,
+              parentid: parentId,
+              class: 'device-group-box'
+          }));
+          $item.append($('<label>', {
+              for: item.id,
+              text: item._name,
+              class: 'device-group-label'
+          }));
+          parentUL.append($item);
+          if (item.children) {
+              var $ul = $('<ul>', {
+                  style: 'display: none'
+              }).appendTo($item);
+              addItem($ul, item, item.id);
+          }
+      }
+  }
+
+  function uncheckParents(parentid) {
+    //console.log(parentid);
+    var parent = $("input[id='"+parentid+"']");
+    parentid = parent.attr('parentid');
+    //console.log(parent.closest('li').find('input:checked').length)
+    if (parent.closest('li').find('input:checked').length == 0) {
+      parent.prop('indeterminate',false);
+      parent.prop('checked',false);
+    } else {
+      parent.prop('indeterminate',true);
+    }
+    if (parentid) {
+      uncheckParents(parentid);
+    }
+  }
+
+  function checkParents(parentid) {
+    //console.log(parentid);
+    var parent = $("input[id='"+parentid+"']");
+    parentid = parent.attr('parentid');
+    //console.log(parent.closest('li').find('input:checkbox:not(:checked)').length);
+    if (parent.closest('li').find('input:checkbox:not(:checked)').length <= 1) {
+      parent.prop('indeterminate',false);
+      parent.prop('checked',true);
+    } else {
+      parent.prop('indeterminate',true);
+    }
+    if (parentid) {
+      checkParents(parentid);
+    }
+  }
+
+  function getSelectedGroups() {
+    var selected_groups = [];
+    $('#root').find('input:checked').each(function() {
+      if (parseInt($(this).attr('parentid')) > 8) {
+        if ($("input[id='"+$(this).attr('parentid')+"']").prop('checked')) {
+          return
+        }
+      }
+      if (parseInt($(this).attr('id')) > 8) {
+          selected_groups.push(parseInt($(this).attr('id')));
+      }
+    });
+    //console.log(selected_groups);
+    return selected_groups;
+  }
+
+  $.ajaxSetup({cache:false});
+  $.getJSON("{{ url_for('static', filename='groups.json') }}", function(json) {
+    addItem($('#root'), json);
+    $(':checkbox').click(function() {
+       var stat = this.checked;
+       $(this).closest('li').find(':checkbox').each(function() {
+         if (this.checked != stat) {$(this).prop('checked',stat);}
+       });
+       var parentid = $(this).attr('parentid');
+       if ((parentid) && (!this.checked)) {
+         uncheckParents(parentid);
+       } else if (parentid) {
+         checkParents(parentid);
+       }
+       if (this.checked) {
+         $(this).closest('li').find('ul').slideDown();
+       } else {
+         $(this).closest('li').find('ul').slideUp();
+       }
+    });
+    $('label').click(function() {
+        $(this).closest('li').children('ul').slideToggle();
+    });
+  });
+
+  var table = $('#devices').DataTable({
+    data: [],
+    //scrollX: true,
+    //scrollY: 440,
+    displayLength: 50,
+    //bSort: false,
+    language: {
+      'infoEmpty': 'с _START_ по _END_ из _TOTAL_ строк',
+      'info': 'с _START_ по _END_ из _TOTAL_ строк',
+      'emptyTable': 'Нет данных',
+      'search': 'Поиск',
+      'paginate': {
+        'first':      "Первая",
+        "last":       "Последняя",
+        "next":       "Следующая",
+        "previous":   "Предыдущая"
+      }
+    },
+    columns: [
+      {'data': 'rownum'},
+      {'data': 'device_id', 'name': 'device_id', 'visible': false},
+      {'data': 'region'},
+      {'data': 'city'},
+      {'data': 'full_bs_name'},
+      {'data': 'device_name'},
+      {'data': 'dt_name', 'name': 'dt_name', 'visible': false},
+      {'data': 'ip_addr', 'name': 'ip_addr', 'visible': false},
+      {'data': 'snmp_available', 'name': 'snmp_available', 'visible': false},
+      {'data': 'error', 'name': 'error', 'visible': false},
+      {'data': 'chastota', 'visible': false},
+      {'data': 'passband'},
+      {'data': 'l_cpe', 'name': 'l_cpe', 'visible': true},
+      {'data': 'cpecount', 'name': 'cpecount'},
+      {'data': 'cpeutil', 'name': 'cpeutil', 'visible': true},
+      {'data': 'l_load', 'name': 'l_load'},
+      {'data': 'uplink', 'name': 'uplink'},
+      {'data': 'maxuplink', 'name': 'maxuplink', 'defaultContent':'', 'visible': false},
+      {'data': 'downlink', 'name': 'downlink'},
+      {'data': 'maxdownlink', 'name': 'maxdownlink', 'defaultContent':'', 'visible': false},
+      {'data': 'uputil', 'name': 'uputil'},
+      {'data': 'maxuputil', 'name': 'maxuputil', 'defaultContent':'', 'visible': false},
+      {'data': 'downutil', 'name': 'downutil'},
+      {'data': 'maxdownutil', 'name': 'maxdownutil', 'defaultContent':'', 'visible': false},
+      {'data': 'util', 'name': 'util'},
+      {'data': 'maxutil', 'name': 'maxutil', 'defaultContent':'', 'visible': false},
+      {
+          "data":           null,
+          "orderable":      false,
+          "name":           "buttons",
+          "render": function(data, type, row, meta) {
+            if (type === 'display') {
+              data = '<div class="btn-group" role="group">'+
+                     '<button id="ip_addr" type="button" class="btn btn-outline-success custom details-control">'+row.ip_addr+'</button>'+
+                     //'<button type="button" class="btn btn-outline-success details-control">G</button>'+
+                     '<a target="_blank" class="btn btn-outline-danger" href="{{ url_for('api.redirect_latest') }}?id='+row.device_id+'">Z</a>'+
+                     '</div>';
+            }
+            return data;
+          }
+      },
+    ],
+    /*columnDefs: [
+      {targets:[4], class:"wrapok", width:"200px"},
+    ],*/
+    buttons: [
+        {
+          extend: 'copy',
+          text: 'Скопировать в буфер'
+        },
+        {
+          extend: 'csv',
+          text: 'Экспорт в CSV'
+        },
+        {
+          extend: 'excel',
+          text: 'Экспорт в Excel'
+        },
+        {
+          extend: 'colvis',
+          text: 'Видимость колонок',
+          columns: ':not(:eq(0),:eq(26))'
+        }
+    ],
+    dom: 'Bfrtip'
+  });
+  var in_progress = false;
+  var in_finished = 0;
+  var l_cpeutil = 75;
+  var l_util = 75;
+  var time_from = new Date($('#start-date-input').val()).getTime();
+  var time_till = new Date($('#stop-date-input').val()).getTime();
+  var workonly = $('#workonly').prop('checked');
+  var weekdays = getWeekDays();
+  var from_hour = parseInt($('#from_hour option:checked').val());
+  var till_hour = parseInt($('#till_hour option:checked').val());
+  var offset = parseInt($('#offset option:checked').val());
+
+  function getWeekDays() {
+    var result = [];
+    $('#weekdays option:checked').each(function() {
+      result.push($(this).val());
+    });
+    return result;
+  }
+
+  function getItemsHistoryUrl(d) {
+    var urlparams = [
+      '{{ url_for('api.itemhistory') }}?host='+d.device_id,
+      'time_from='+time_from/1000,
+      'time_till='+time_till/1000,
+      'key=interface.radio.(inSpeed|outSpeed|cpeCount)|989.1.16.2.6.3.4.1.2',
+      'workonly='+workonly,
+      'weekdays=['+weekdays+']',
+      'from_hour='+from_hour,
+      'till_hour='+till_hour,
+      'offset='+offset
+    ];
+    return encodeURI(urlparams.join('&'));
+  }
+
+  function format ( d ) {
+    return '<p class="text-center">'+
+           '<img src="{{ url_for('api.chart') }}?host='+d.device_id+'&'+
+           'time_from='+time_from/1000+'&time_till='+time_till/1000+'&'+
+           'key=interface.radio.*Speed&timestamp='+Date.now()+'" width="733" height="274">'+
+           '<br><br>'+
+           '<img src="{{ url_for('api.chart') }}?host='+d.device_id+'&'+
+           'time_from='+time_from/1000+'&time_till='+time_till/1000+'&'+
+           'key=interface.radio.cpeCount|989.1.16.2.6.3.4.1.2&timestamp='+Date.now()+'" width="733" height="274">'+
+           '</p>';
+  }
+
+  function checkProgress(a) {
+    if (a == 0) {
+      in_progress = true;
+      in_finished = 0;
+      $('.progress-bar').css("width", function(i) {return 0+"%";});
+      $('#progress-percent').html('0%');
+      $('#progress').collapse('show');
+      return true;
+    } else if (a == 1) {
+      in_finished++;
+      $('.progress-bar').css("width",function(i) {
+        return ((in_finished*100)/table.data().count())+"%";
+      });
+      $('#progress-percent').html((in_finished*100/table.data().count()).toFixed(2)+"%");
+      if (in_finished == table.data().count()) {
+        $('#progress').collapse('hide');
+        in_progress = false;
+        return true;
+      }
+    } else if (a == 2) {
+      if (in_progress) { return true; }
+    }
+    return false;
+  }
+
+  function getDevices() {
+    if (checkProgress(2)) { return; }
+    groups = getSelectedGroups();
+    if(!groups.length) {
+      alert('Необходимо выбрать группу устройств');
+      return;
+    }
+    time_from = new Date($('#start-date-input').val()).getTime();
+    time_till = new Date($('#stop-date-input').val()).getTime();
+    if (time_from >= time_till) {
+      alert('Начало периода не может быть больше или равно концу периода');
+      return;
+    }
+    if ((time_till/1000-time_from/1000) > 6048000) {
+      alert('Заданный период слишком большой');
+      return;
+    }
+    workonly = $('#workonly').prop('checked');
+    if (workonly) {
+      weekdays = getWeekDays();
+      if(!weekdays.length) {
+        alert('Необходимо выбрать дни недели');
+        return;
+      }
+      from_hour = parseInt($('#from_hour option:checked').val());
+      till_hour = parseInt($('#till_hour option:checked').val());
+      offset = parseInt($('#offset option:checked').val());
+      if (from_hour >= till_hour) {
+        alert('Некорректный интервал фильтра по времени');
+        return;
+      }
+    }
+    l_cpeutil = parseInt($('#l_cpeutil').val());
+    if (l_cpeutil < 0 && l_cpeutil > 100) {
+      alert('Пороговое значение кол-ва CPE не может быть больше 100%');
+      return;
+    }
+    l_util = parseInt($('#l_util').val());
+    if (l_util < 0 && l_util > 100) {
+      alert('Пороговое значение утилизации не может быть больше 100%');
+      return;
+    }
+    checkProgress(0);
+    $.ajax({
+      url:'{{ url_for('reports.get_devices', key="bs_load") }}?groups='+groups.join(','),
+      async: true,
+      dataType: 'json',
+      success:function(data) {
+        table.order([0, 'asc']);
+        table.clear().draw();
+        table.rows.add(data.get_devices);
+        table.columns.adjust().draw();
+        in_progress = false;
+        getZabbixData();
+      },
+      error:function(xhr, status, error) {
+        console.error(error);
+      }
+    });
+  }
+
+  function iCol(name) {
+    return table.column(name+':name').index();
+  }
+
+  function getCell(r, name) {
+    return table.cell(r, iCol(name)).data();
+  }
+
+  function setError(r, error) {
+    if (getCell(r, 'error')) {
+      table.cell(r, iCol('error')).data(getCell(r, 'error') + '; '+ error);
+    } else {
+      table.cell(r, iCol('error')).data(error);
+    }
+    return;
+  }
+
+  function searchItem(key, items){
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].key_.match(key)) { return items[i]; }
+    }
+  }
+
+  function setUtil(r, kvalue, kutil, value, calc, limit, name, fixed) {
+    if (typeof fixed === 'undefined') fixed = 3;
+    //if (typeof bar === 'undefined') bar = 'test';
+    if (isNaN(value)) { setError(r, 'нет данных по опросу "'+name+'"'); return; }
+    table.cell(r, iCol(kvalue)).data(value.toFixed(fixed));
+    if (!calc) { setError(r, 'не задано расчетное значение "'+name+'"'); return; }
+    var util = (value * 100) / calc;
+    table.cell(r, iCol(kutil)).data(util.toFixed(1));
+    if (util > limit) {
+      table.cell(r, iCol(kutil)).data('<font color=red><b>'+util.toFixed(1)+'</b></font>');
+    }
+    return;
+  }
+
+  function calculateSectorLoad(data, r) {
+    checkProgress(1);
+    table.cell(r, iCol('snmp_available')).data(data.snmp_available);
+    if (data.snmp_available == "2") {
+      var cell = $(table.cell(r, iCol('buttons')).node()).find('#ip_addr');
+      $(cell).removeClass('btn-outline-success');
+      $(cell).addClass('btn-danger');
+      setError(r, 'SNMP: ' + data.snmp_error);
+    }
+    if (!data.items.length) { setError(r, 'нет данных по опросам'); return; }
+    var item = searchItem('cpeCount|989.1.16.2.6.3.4.1.2', data.items);
+    if (!item) { setError(r, 'нет опроса "Количество CPE"'); }
+    else {
+      setUtil(r, 'cpecount', 'cpeutil', item.avg, getCell(r, 'l_cpe'), l_cpeutil, 'Количество CPE', 1);
+    }
+    var dt_name = getCell(r, 'dt_name');
+    if (dt_name.match(/revolution|cambium|ubiquiti/i)) {
+      var item = searchItem('outSpeed', data.items);
+      if (!item) { setError(r, 'нет опроса "Исходящий трафик"'); }
+      else {
+        setUtil(r, 'uplink', 'uputil', item.avg/1000000, getCell(r, 'l_load')/2, l_util, 'Исходящий трафик');
+        setUtil(r, 'maxuplink', 'maxuputil', item.max/1000000, getCell(r, 'l_load')/2, l_util, 'Исходящий трафик');
+      }
+      var item = searchItem('inSpeed', data.items);
+      if (!item) { setError(r, 'нет опроса "Входящий трафик"'); }
+      else {
+        setUtil(r, 'downlink', 'downutil', item.avg/1000000, getCell(r, 'l_load')/2, l_util, 'Входящий трафик');
+        setUtil(r, 'maxdownlink', 'maxdownutil', item.max/1000000, getCell(r, 'l_load')/2, l_util, 'Входящий трафик');
+      }
+    } else if (dt_name.match(/breeze|airspan/i)) {
+      var outItem = searchItem('outSpeed', data.items);
+      if (!outItem) { setError(r, 'нет опроса "Исходящий трафик"'); }
+      var inItem = searchItem('inSpeed', data.items);
+      if (!inItem) { setError(r, 'нет опроса "Входящий трафик"'); }
+      if (isNaN(inItem.avg/1000000) && isNaN(outItem.avg/1000000)) {
+        setError(r, 'нет данных по опросу "Входящий/Исходящий трафик"');
+        return;
+      }
+      table.cell(r, iCol('uplink')).data((outItem.avg/1000000).toFixed(3));
+      table.cell(r, iCol('downlink')).data((inItem.avg/1000000).toFixed(3));
+      table.cell(r, iCol('maxuplink')).data((outItem.max/1000000).toFixed(3));
+      table.cell(r, iCol('maxdownlink')).data((inItem.max/1000000).toFixed(3));
+      var l_load = getCell(r, 'l_load');
+      if (!l_load) { setError(r, 'не задано расчетное значение "Входящий/Исходящий трафик"'); return; }
+      var avg = (outItem.avg/1000000) + (inItem.avg/1000000);
+      var max = (outItem.max/1000000) + (inItem.max/1000000);
+      var util = (avg * 100) / l_load;
+      var maxutil = (max * 100) / l_load;
+      if (!isFinite(util)) { return; }
+      table.cell(r, iCol('util')).data(util.toFixed(2));
+      if (util > l_util) {
+        table.cell(r, iCol('util')).data('<font color=red><b>'+util.toFixed(2)+'</b></font>');
+      }
+      table.cell(r, iCol('maxutil')).data(maxutil.toFixed(2));
+      if (maxutil > l_util) {
+        table.cell(r, iCol('maxutil')).data('<font color=red><b>'+maxutil.toFixed(2)+'</b></font>');
+      }
+    }
+  }
+
+  function getZabbixData() {
+    table.rows().every(function(rowIdx, tableLoop, rowLoop) {
+      var row = this.data();
+      $.ajax({
+        url: getItemsHistoryUrl(row),
+        async: true,
+        success: function(data) {
+          calculateSectorLoad(data, rowIdx);
+        },
+        error: function(xhr, ajaxOptions, thrownError) {
+          checkProgress(1);
+        }
+      });
+    });
+  }
+
+  $('#table tbody').on('click', 'button.details-control', function () {
+    var tr = $(this).closest('tr');
+    var row = table.row(tr);
+    if (row.child.isShown()) {
+      row.child.hide();
+      tr.removeClass('shown');
+    } else {
+      row.child(format(row.data())).show();
+      tr.addClass('shown');
+    }
+  });
+</script>
+{% endblock %}

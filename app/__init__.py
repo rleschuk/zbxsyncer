@@ -42,8 +42,8 @@ def exceptions(e):
 from app.blueprints import api
 app.register_blueprint(api)
 
-#from app.blueprints import reports
-#app.register_blueprint(reports)
+from app.blueprints import reports
+app.register_blueprint(reports)
 
 """
 from libs.zapi import Zapi, ZapiAttrException

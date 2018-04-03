@@ -6,11 +6,12 @@ from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 from app import app
+from app.libs.datapi import dbexecute
 from app.libs.pyzabbix import ZabbixAPI
 from app.libs.utils import format_data
 from datetime import datetime
 from time import time
-from pandas import DataFrame
+from pandas import DataFrame, to_numeric
 
 class ZapiAttrException(Exception): pass
 
@@ -43,7 +44,7 @@ class Zapi(object):
         self.proxys_online = []
         for proxy in proxys:
             if proxy['lastaccess'] < timestamp:
-                app.logger.debug('proxy {0} in offline'.format(proxy['proxyid']))
+                #app.logger.debug('proxy %s in offline' % proxy['proxyid'])
                 self.proxys_offline.append(proxy['proxyid'])
             else:
                 self.proxys_online.append(proxy['proxyid'])
@@ -296,12 +297,12 @@ class Zapi(object):
     def delete_host(self, hostid):
         return self.conn.host.delete(hostid)
 
-    def get_link_latest(self, host=0, ip=''):
+    def get_link_latest(self, id=0, ip='', **kwargs):
         hostids = []
-        if host:
+        if id:
             hostids = self._do_request('host.get', dict(
                 output=['hostid','host'],
-                filter={ 'host': [host] }
+                filter={ 'host': [id] }
             ))
         elif ip:
             hostids = self._do_request('hostinterface.get', dict(
@@ -311,11 +312,10 @@ class Zapi(object):
         if hostids:
             return "{0}/latest.php?filter_set=1&show_without_data=1&hostids[]={1}".format(self.url, hostids[0]['hostid'])
         else:
-            return "{0}/search.php?search={0}".format(self.url, host)
+            return "{0}/search.php?search={0}".format(self.url, id)
 
-    """
     def get_items_history(self, host, key='icmpping', time_from=0, time_till=0, period=3600,
-                          workonly=False, offset=0, weekdays=[], from_hour=9, till_hour=18):
+                          workonly=False, offset=0, weekdays=[], from_hour=9, till_hour=18, **kwargs):
         result = dict(
             host=host, key=key, workonly=workonly, offset=offset,
             time_from=time_from, time_till=time_till, period=period,
@@ -344,13 +344,13 @@ class Zapi(object):
                     sortfield = "clock"
                 )))
                 if history.empty: continue
-                history.clock = pd.to_numeric(history.clock, errors='coerce')
-                history.value = pd.to_numeric(history.value, errors='coerce')
+                history.clock = to_numeric(history.clock, errors='coerce')
+                history.value = to_numeric(history.value, errors='coerce')
                 #if offset: history.clock = history.clock + int(offset)
-                #if workonly:
-                #    history = history.loc[history['clock'].isin(
-                #        filterWorkTimestamp(history.clock.tolist(), offset, weekdays, from_hour, till_hour)
-                #    )]
+                if workonly:
+                    history = history.loc[history['clock'].isin(
+                        filterWorkTimestamp(history.clock.tolist(), offset, weekdays, from_hour, till_hour)
+                    )]
                 #print history
                 items.set_value(index, 'max', history.value.max())
                 items.set_value(index, 'min', history.value.min())
@@ -358,41 +358,75 @@ class Zapi(object):
         result['items'] = items.fillna(0).to_dict(orient='records')
         return result
 
-    def get_chart_cached(self, host, key='icmpping', time_from=0, time_till=0, stime=0, period=3600, width=1000):
-        connection = ZabbixAPI(ZURL)
-        connection.session.verify = False
-        connection.login(USER, PASS)
-        items = pd.DataFrame(connection.item.get(
+    def get_chart_cached(self, host, key='icmpping', time_from=0, time_till=0, stime=0, period=3600, width=1000, **kwargs):
+        items = DataFrame(self._do_request('item.get', dict(
             output=['hostid','itemid','name','key_'],
-            hostids=[h['hostid'] for h in connection.host.get(output=['hostid'], filter={ 'host': [host] })]
-        ))
+            hostids=[h['hostid'] for h in self._do_request('host.get', dict(output=['hostid'], filter={ 'host': [host] }))]
+        )))
         items = items[items.key_.str.contains(key, regex=True, na=False)]
         if items.empty: return 'static/images/fake_chart.png'
         if (time_till and time_from):
             stime = datetime.utcfromtimestamp(float(time_from)).strftime("%Y%m%d%H%M%S")
             period = int(time_till)-int(time_from)
         params = [
-            'period='+str(period),
-            '&'.join(['itemids['+i+']='+i for i in items['itemid'].tolist()]),
+            'period=%d' % period,
+            '&'.join(['itemids[%s]=%s' % (i,i) for i in items['itemid'].tolist()]),
             'type=0',
             'batch=1',
             'updateProfile=0',
             'width=850',
             'height=180'
         ]
-        if stime: params.append('stime='+str(stime))
-        filename = '{0}_{1}_{2}_{3}.png'.format(host, ''.join(items['itemid'].tolist()), time_from, time_till)
+        print('&'.join(params))
+        if stime: params.append('stime=%s' % stime)
+        filename = '%s_%s_%s_%s.png' % (host, ''.join([str(i) for i in items['itemid'].tolist()]), time_from, time_till)
         with requests.session() as c:
-            c.post('{0}/index.php?login=1'.format(ZURL), verify=False, data={
-                'name': USER,
-                'password': PASS,
+            c.post('{0}/index.php?login=1'.format(self.url), verify=False, data={
+                'name': self.username,
+                'password': self.password,
                 'enter': 'Sign in',
                 'autologin': '1',
                 'request': ''
             })
-            #print '{0}/chart.php?{1}'.format(ZURL, '&'.join(params))
-            r=c.get('{0}/chart.php?{1}'.format(ZURL, '&'.join(params)))
-            with open('static/images/'+filename, 'wb') as img:
+            r = c.get('{0}/chart.php?{1}'.format(self.url, '&'.join(params)))
+            with open('%s/app/static/images/%s' % (app.config['BASE_DIR'], filename), 'wb') as img:
                 img.write(r.content)
-        return 'static/images/'+filename
-    """
+        return 'static/images/%s' % filename
+
+
+def sync_by_device_id(device_id):
+    timestamp = int(time())
+    if not device_id or not device_id.isdigit():
+        return dict(error = 'incorrect argument device_id',
+                    timestamp = timestamp)
+    error = 'ok'
+    eqm_device = None
+    zbx_device = None
+    params = []
+    try:
+        eqm_device = dbexecute(
+            app.config['SQL_SELECT_DEVICES'].format('and d.device_id = %s' % device_id)
+        )
+        if eqm_device.empty:
+            eqm_device = None
+        else:
+            eqm_device = eqm_device.to_dict(orient='records')[0]
+            #try:
+            #    Publisher().check_process(eqm_device, timestamp)
+            #except Exception as e:
+            #    app.logger.error(repr(e))
+            zbx = Zapi()
+            zbx_device = zbx.get_host(eqm_device)
+            if len(zbx_device):
+                zbx_device = zbx_device[0]
+            else:
+                zbx_device = None
+            params = zbx.sync_host(eqm_device, zbx_device)
+    except Exception as err:
+        app.logger.error('%s %s' % (device_id, repr(err)))
+        error = repr(err)
+    return dict(eqm_device = eqm_device,
+                zbx_device = zbx_device,
+                error = error,
+                params = params,
+                timestamp = timestamp)

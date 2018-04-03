@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <title></title>
+    <style type="text/css">
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      tr, td {
+        padding: 3px;
+        border: 1px solid black;
+      }
+    </style>
+  </head>
+  <body>
+    <table>
+      <tr>
+        <td>Device ID:</td>
+        <td>{{ result['eqm_device']['host'] }}</td>
+      </tr>
+      <tr>
+        <td>Device IP:</td>
+        <td>{{ result['eqm_device']['device_ip'] }}</td>
+      </tr>
+      <tr>
+        <td>Device name:</td>
+        <td>{{ result['eqm_device']['device_name'] }}</td>
+      </tr>
+      <tr>
+        <td>Результат: </td>
+        <td>{{ result['error'] }}</td>
+      </tr>
+    </table>
+  </body>
+</html>

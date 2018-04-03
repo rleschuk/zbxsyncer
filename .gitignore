@@ -6,6 +6,8 @@ __pycache__/
 
 # Production config
 config.py
+# Production logs
+tmp/*.log*
 
 # C extensions
 *.so

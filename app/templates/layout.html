@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>{% block title %}{% endblock %} - ZBXReporter</title>
+    <link rel="stylesheet" href="{{ url_for('static',filename='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static',filename='css/datatables.min.css') }}"/>
+    <link rel="stylesheet" href="{{ url_for('static',filename='css/custom.css') }}">
+    <script src="{{ url_for('static',filename='js/jquery-3.2.1.min.js') }}"></script>
+    <script src="{{ url_for('static',filename='js/tether.min.js') }}"></script>
+    <script src="{{ url_for('static',filename='js/bootstrap.min.js') }}"></script>
+    <script src="{{ url_for('static',filename='js/datatables.min.js') }}"></script>
+  </head>
+  <body>
+    {% include 'includes/_navbar.html' %}
+    <br><br><br>
+    <div class="container-fluid">
+        {% include 'includes/_messages.html' %}
+        {% block body %}{% endblock %}
+    </div>
+    <footer class="footer">
+      <div class="container-fluid">
+        <p class="text-muted text-right">
+          Contact: R.Leschuk, email: <a href="mailto:roman.leshchuk@domru.ru">roman.leshchuk@domru.ru</a>, telegram: <a href="https://telegram.me/rleschuk">@rleschuk</a>
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,49 @@
+html {
+  font-size: 11px;
+}
+td {
+  vertical-align: middle !important;
+}
+td.center { 
+  text-align: center;
+}
+th {
+  vertical-align: middle !important;
+}
+.device-groups-div {
+  height: 310px;
+  font-size: 110%;
+  margin: 0 !important;
+  padding: 10px !important;
+  background: white;
+  overflow: auto !important;
+  border-radius: 3px;
+  border: 1px solid rgba(0,0,0,.15);
+}
+.device-group-ul-root {
+  list-style-type: none;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.device-group-li {
+  list-style-type: none;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.device-group-box {
+  cursor: pointer;
+  position: relative;
+  top: 5px;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  margin-right:5px;
+}
+.device-group-label {
+  cursor: pointer;
+}
+.custom {
+  width: 70px !important;
+}
