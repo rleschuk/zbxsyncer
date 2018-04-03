@@ -32,21 +32,15 @@ class Publisher(object):
         )
 
     def is_zero_queue(self):
-        if self.connection.is_closed:
-            self.connect()
-        if self.queue.method.message_count == 0:
-            return True
-        else:
-            return False
+        if self.connection.is_closed: self.connect()
+        if self.queue.method.message_count == 0: return True
+        else: return False
 
     def check_process(self, eqm_device, timestamp):
-        if self.connection.is_closed:
-            self.connect()
+        if self.connection.is_closed: self.connect()
         if self.queue.method.message_count == 0:
-            try:
-                os.remove('%s/%s.json' % (app.config['TMP_DIR'], eqm_device['host']))
-            except:
-                pass
+            try: os.remove('%s/%s.json' % (app.config['TMP_DIR'], eqm_device['host']))
+            except Exception as err: pass
         else:
             with open('%s/%s.json' % (app.config['TMP_DIR'], eqm_device['host']), 'w') as tempfile:
                 json.dump({'timestamp': timestamp, 'eqm_device': eqm_device}, tempfile)
@@ -94,10 +88,8 @@ class Consumer(threading.Thread):
 
     def disconnect(self):
         app.logger.info('%s disconnecting from RabbitMQ...' % self.getName())
-        try:
-            self.connection.close()
-        except Exception as why:
-            pass
+        try: self.connection.close()
+        except Exception as why: pass
         app.logger.info('%s disconnected from RabbitMQ' % self.getName())
         self.connected = False
 
@@ -160,9 +152,7 @@ class Consumer(threading.Thread):
             with open('%s/%s.json' % (app.config['TMP_DIR'], eqm_device['host'])) as tempfile:
                 data = json.load(tempfile)
             os.remove('%s/%s.json' % (app.config['TMP_DIR'], eqm_device['host']))
-            if int(data['timestamp']) < int(timestamp):
-                return True
-            else:
-                return False
-        except:
+            if int(data['timestamp']) < int(timestamp): return True
+            else: return False
+        except Exception as err:
             return True

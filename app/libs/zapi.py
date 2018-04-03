@@ -9,6 +9,7 @@ from app import app
 from app.libs.datapi import dbexecute
 from app.libs.pyzabbix import ZabbixAPI
 from app.libs.utils import format_data
+from app.libs import rabbitmq
 from datetime import datetime
 from time import time
 from pandas import DataFrame, to_numeric
@@ -411,10 +412,10 @@ def sync_by_device_id(device_id):
             eqm_device = None
         else:
             eqm_device = eqm_device.to_dict(orient='records')[0]
-            #try:
-            #    Publisher().check_process(eqm_device, timestamp)
-            #except Exception as e:
-            #    app.logger.error(repr(e))
+            try:
+                rabbitmq.Publisher().check_process(eqm_device, timestamp)
+            except Exception as e:
+                app.logger.error(repr(e))
             zbx = Zapi()
             zbx_device = zbx.get_host(eqm_device)
             if len(zbx_device):

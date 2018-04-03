@@ -100,7 +100,7 @@ def check_proxy_status():
 setattr(app, 'scheduler', BackgroundScheduler())
 app.scheduler.add_job(
     func=sync_all,
-    trigger=CronTrigger(hour='*/2', minute='5'),
+    trigger=CronTrigger(hour='*/4'),
     id='sync_all',
     name='sync_all',
     replace_existing=True
