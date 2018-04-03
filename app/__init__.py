@@ -13,9 +13,10 @@ for key, value in app.config.get('ENV', {}).items(): os.environ[key] = value
 
 formatter = logging.Formatter(app.config['LOG_FORMAT'])
 handler = RotatingFileHandler(app.config['LOG_FILENAME'], maxBytes=10000000, backupCount=5)
-handler.setLevel(logging.DEBUG)
+handler.setLevel(app.config['LOG_LEVEL'])
 handler.setFormatter(formatter)
 app.logger.addHandler(handler)
+app.logger.setLevel(app.config['LOG_LEVEL'])
 
 setattr(app, 'db', SQLAlchemy(app))
 
@@ -45,26 +46,24 @@ app.register_blueprint(api)
 from app.blueprints import reports
 app.register_blueprint(reports)
 
-"""
-from libs.zapi import Zapi, ZapiAttrException
-from libs.datapi import Datapi
-from libs.rabbitmq import Publisher, Consumer
-from libs.utils import *
-
+from app.libs.zapi import Zapi, ZapiAttrException
+from app.libs.datapi import dbexecute
+from app.libs.rabbitmq import Publisher, Consumer
+#from app.libs.utils import *
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import atexit
 
-consumers = []
-for index in xrange(CONSUMERS_COUNT):
-    consumers.append(Consumer(consumer_name='Consumer-%s' % (index + 1)))
-    #consumers[index].setName('Consumer-%s' % (index + 1))
-    consumers[index].setDaemon(True)
-    consumers[index].start()
+setattr(app, 'consumers', [])
+for index in range(app.config['CONSUMERS_COUNT']):
+    app.consumers.append(Consumer(consumer_name='Consumer-%s' % (index + 1)))
+    #app.consumers[index].setName('Consumer-%s' % (index + 1))
+    app.consumers[index].setDaemon(True)
+    app.consumers[index].start()
 
 def sync_all():
+    import time, re
     publisher = Publisher()
-    datapi = Datapi()
     if publisher.is_zero_queue():
         timestamp = int(time.time())
         chunksize = 100
@@ -79,7 +78,7 @@ def sync_all():
                     attempt=1,
                     timestamp=timestamp
                 )))
-                logging.debug('publish device to sync {0:07d}/{1}'.format(index+offset+1, eqm_device['host']))
+                app.logger.debug('publish device to sync {0:07d}/{1}'.format(index+offset+1, eqm_device['host']))
                 if eqm_device['device_ip']:
                     eqm_hosts.append(eqm_device['host'])
         zbx_hosts = Zapi().get_all_host()
@@ -93,16 +92,15 @@ def sync_all():
                         attempt=1,
                         timestamp=timestamp
                     )))
-                    logging.debug('publish device to delete {0:07d}/{1}'.format(index+1, host['host']))
+                    app.logger.debug('publish device to delete {0:07d}/{1}'.format(index+1, host['host']))
     publisher.close()
 
 def check_proxy_status():
-    for consumer in consumers:
+    for consumer in app.consumers:
         consumer.zbx.init_proxy()
 
-scheduler = BackgroundScheduler()
-scheduler.start()
-scheduler.add_job(
+setattr(app, 'scheduler', BackgroundScheduler())
+app.scheduler.add_job(
     func=sync_all,
     trigger=CronTrigger(hour='*/2'),
     #trigger=CronTrigger(minute='*/5'),
@@ -110,23 +108,27 @@ scheduler.add_job(
     name='sync_all',
     replace_existing=True
 )
-scheduler.add_job(
+app.logger.info('scheduler add job sync_all')
+app.scheduler.add_job(
     func=check_proxy_status,
     trigger=CronTrigger(minute='*/10'),
     id='check_proxy_status',
     name='check_proxy_status',
     replace_existing=True
 )
+app.logger.info('scheduler add job check_proxy_status')
+
+app.scheduler.start()
+app.logger.info('scheduler started')
 
 def save_exit():
     try:
-        for consumer in consumers:
-            consumer.shutdown()
-            #consumer.join()
-        scheduler.shutdown()
-    except:
-        pass
-
+        for consumer in app.consumers: consumer.shutdown()
+        app.scheduler.shutdown()
+        app.logger.info('scheduler has been shut down')
+    except Exception as err:
+        app.error('save exit error: %s' % repr(err))
 atexit.register(save_exit)
+app.logger.info('atexit register save_exit')
 
-"""
+app.logger.info('initialization finished')
