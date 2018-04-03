@@ -8,8 +8,16 @@ from logging.handlers import RotatingFileHandler
 
 app = Flask(__name__)
 app.config.from_object('config')
-
+setattr(app, 'db', SQLAlchemy(app))
 for key, value in app.config.get('ENV', {}).items(): os.environ[key] = value
+
+from app.libs import zapi
+from app.libs.datapi import dbexecute
+from app.libs.rabbitmq import Publisher, Consumer
+#from app.libs.utils import *
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import atexit
 
 formatter = logging.Formatter(app.config['LOG_FORMAT'])
 handler = RotatingFileHandler(app.config['LOG_FILENAME'], maxBytes=10000000, backupCount=5)
@@ -17,8 +25,6 @@ handler.setLevel(app.config['LOG_LEVEL'])
 handler.setFormatter(formatter)
 app.logger.addHandler(handler)
 app.logger.setLevel(app.config['LOG_LEVEL'])
-
-setattr(app, 'db', SQLAlchemy(app))
 
 @app.errorhandler(400)
 def forbidden(error):
@@ -46,14 +52,6 @@ app.register_blueprint(api)
 from app.blueprints import reports
 app.register_blueprint(reports)
 
-from app.libs.zapi import Zapi, ZapiAttrException
-from app.libs.datapi import dbexecute
-from app.libs.rabbitmq import Publisher, Consumer
-#from app.libs.utils import *
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
-import atexit
-
 setattr(app, 'consumers', [])
 for index in range(app.config['CONSUMERS_COUNT']):
     app.consumers.append(Consumer(consumer_name='Consumer-%s' % (index + 1)))
@@ -67,7 +65,7 @@ def sync_all():
     if publisher.is_zero_queue():
         timestamp = int(time.time())
         chunksize = 100
-        chunks = datapi.GetDataViaOracle(SQL_SELECT_DEVICES.format(''), chunksize=chunksize)
+        chunks = dbexecute(app.config['SQL_SELECT_DEVICES'].format(''), chunksize=chunksize)
         eqm_hosts = []
         for chunk_index, eqm_devices in enumerate(chunks):
             offset = chunk_index * chunksize
@@ -81,7 +79,7 @@ def sync_all():
                 app.logger.debug('publish device to sync {0:07d}/{1}'.format(index+offset+1, eqm_device['host']))
                 if eqm_device['device_ip']:
                     eqm_hosts.append(eqm_device['host'])
-        zbx_hosts = Zapi().get_all_host()
+        zbx_hosts = zapi.Zapi().get_all_host()
         regex = re.compile(r'@\d+$')
         for index, host in enumerate(zbx_hosts):
             if re.search(regex, host['name']):
