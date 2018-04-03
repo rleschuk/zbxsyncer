@@ -18,29 +18,30 @@ def get_status():
 
 @api.route('/add_public_ip')
 def add_public_ip():
+    device_ip = request.args.get('ip')
+    if not device_ip:
+        return jsonify(error='incorrect argument ip', timestamp=timestamp)
     error = ''
     devices = None
     timestamp = int(time.time())
-    if not request.args.get('ip'):
-        return jsonify(error='incorrect argument ip',timestamp=timestamp)
     try:
         zbx = Zapi()
-        zbx_device = zbx.get_public_host(request.args.get('ip'))
+        zbx_device = zbx.get_public_host(device_ip)
         if len(zbx_device):
             return jsonify(
-                devices=zbx_device,
-                error='',
-                timestamp=timestamp
+                devices = zbx_device,
+                error = '',
+                timestamp = timestamp
             )
         else:
-            devices = zbx.add_public_host(request.args.get('ip'))
+            devices = zbx.add_public_host(device_ip)
     except Exception as err:
-        app.logger.error('{0} {1}'.format(request.args.get('ip'), repr(e)))
+        app.logger.error('{0} {1}'.format(device_ip, repr(err)))
         error = repr(e)
     return jsonify(
-        devices=devices,
-        error='',
-        timestamp=timestamp
+        devices = devices,
+        error = '',
+        timestamp = timestamp
     )
 
 @api.route('/sync_by_device_id', methods=['GET'])
