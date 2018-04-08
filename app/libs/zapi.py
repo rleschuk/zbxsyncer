@@ -352,16 +352,17 @@ class Zapi(object):
                 'autologin': '1',
                 'request': ''
             }, params={'login': 1})
-            response = session_.get('%s/chart.php' % self.config.ZABBIX_URL, params={
+            params = {
                 'period': kwargs.get('period', 3600),
                 'stime': kwargs.get('stime', 0),
                 'type': 0,
                 'batch': 1,
                 'updateProfile': 0,
                 'width': 850,
-                'height': 180,
-                **{'itemids[%s]' % i: i for i in items['itemid'].tolist()}
-            })
+                'height': 180
+            }
+            params.update({'itemids[%s]' % i: i for i in items['itemid'].tolist()})
+            response = session_.get('%s/chart.php' % self.config.ZABBIX_URL, params=params)
             bio = BytesIO(response.content)
             bio.name = 'image.png'
             return bio

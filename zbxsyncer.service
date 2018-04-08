@@ -8,6 +8,7 @@ Group=nginx
 WorkingDirectory=/opt/production/zbxsyncer
 Environment="PATH=/opt/production/zbxsyncer/venv/bin"
 ExecStart=/opt/production/zbxsyncer/venv/bin/uwsgi --ini zbxsyncer.ini
+ExecReload=/bin/kill -HUP $MAINPID
 
 [Install]
 WantedBy=multi-user.target
