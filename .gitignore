@@ -4,8 +4,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Production config
-config.py
 # Production logs
 tmp/*.log*
 

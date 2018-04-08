@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html style="height:100%">
   <head>
     <meta charset="utf-8">
     <title>{% block title %}{% endblock %} - ZBXReporter</title>
@@ -10,11 +10,11 @@
     <script src="{{ url_for('static',filename='js/tether.min.js') }}"></script>
     <script src="{{ url_for('static',filename='js/bootstrap.min.js') }}"></script>
     <script src="{{ url_for('static',filename='js/datatables.min.js') }}"></script>
+
   </head>
-  <body>
+  <body style="height:100%">
     {% include 'includes/_navbar.html' %}
-    <br><br><br>
-    <div class="container-fluid">
+    <div class="container-fluid" style="padding-top: 50px; padding-bottom: 20px; min-height: 95%;">
         {% include 'includes/_messages.html' %}
         {% block body %}{% endblock %}
     </div>

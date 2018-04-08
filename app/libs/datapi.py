@@ -1,5 +1,8 @@
 import pandas as pd
-from app import app
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+from app import db
 
-def dbexecute(query, **kwargs):
-    return pd.read_sql_query(query, app.db.engine, **kwargs)
+def dbexecute(query, app, **kwargs):
+    with app.app_context():
+        return pd.read_sql_query(query, db.engine, **kwargs)

@@ -1,5 +1,5 @@
 import datetime, json, re
-from app import app
+
 
 def json_converter(obj):
     if isinstance(obj, datetime.datetime):
@@ -8,28 +8,31 @@ def json_converter(obj):
         return obj.__str__()
     return obj
 
+
 def json_loads(obj):
     try: return json.loads(obj)
     except Exception: return obj
 
+
 def format_data(d):
-    #print type(d)
-    if type(d) == type([]):
+    if isinstance(d, list):
         for i, e in enumerate(d):
             try: d[i] = format_data(e)
             except: pass
-    if type(d) == type({}):
+    elif isinstance(d, dict):
         for k in d.keys():
             try: d[k] = format_data(d[k])
             except: pass
-    if type(d) == type(''):
+    elif isinstance(d, str):
         try: d = tonumber(d)
         except: pass
+    elif isinstance(d, datetime.datetime):
+        d = d.__str__()
+    elif isinstance(d, datetime.timedelta):
+        d = d.__str__()
     return d
 
-def is_int(d):
-    try:
-        d = int(d)
-        return True
-    except:
-        return False
+
+def tonumber(d):
+    if '.' in d: return float(d)
+    else: return int(d)

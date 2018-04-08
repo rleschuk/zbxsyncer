@@ -1,26 +1,31 @@
-import sys, os
+import sys, os, logging
 import warnings
 warnings.simplefilter(action='ignore', category=UserWarning)
 import requests
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
-from app import app
-from app.libs.datapi import dbexecute
-from app.libs.pyzabbix import ZabbixAPI
-from app.libs.utils import format_data
-from app.libs import rabbitmq
+from .datapi import dbexecute
+from .pyzabbix import ZabbixAPI
+from ..utils import format_data
 from datetime import datetime
 from time import time
 from pandas import DataFrame, to_numeric
+from io import BytesIO
+from config import config as config_
+from flask import current_app
+
+logger = logging.getLogger('app')
+
 
 class ZapiAttrException(Exception): pass
 
+
 class Zapi(object):
-    def __init__(self):
-        self.url = app.config['ZABBIX_URL']
-        self.username = app.config['ZABBIX_USER']
-        self.password = app.config['ZABBIX_PASS']
+
+    def __init__(self, config=None):
+        self.config = config_[os.getenv('FLASK_CONFIG', 'default')] \
+            if config is None else config
         self.conn = None
         self.session_verify = False
         self.proxys_online = []
@@ -28,104 +33,79 @@ class Zapi(object):
         self.connect()
         self.init_proxy()
 
+
     def connect(self):
-        self.conn = ZabbixAPI(self.url)
+        self.conn = ZabbixAPI(self.config.ZABBIX_URL)
         self.conn.session.verify = self.session_verify
-        self.conn.login(self.username, self.password)
+        self.conn.login(self.config.ZABBIX_USER, self.config.ZABBIX_PASS)
+
 
     def _do_request(self, method, params):
         return format_data(self.conn.do_request(method, params)['result'])
 
+
     def init_proxy(self, period=600):
         timestamp = int(time()) - period
-        proxys = self._do_request('proxy.get', dict(
-            output="extend"
-        ))
+        proxys = self._do_request('proxy.get', {'output': 'extend'})
         self.proxys_offline = []
         self.proxys_online = []
         for proxy in proxys:
             if proxy['lastaccess'] < timestamp:
-                #app.logger.debug('proxy %s in offline' % proxy['proxyid'])
                 self.proxys_offline.append(proxy['proxyid'])
             else:
                 self.proxys_online.append(proxy['proxyid'])
         return
 
+
     def get_host(self, context):
         _filter={'host':[]}
-        if type(context) == type([]):
+        if isinstance(context, list):
             _filter['host'] = [e['host'] for e in context]
-        elif type(context) == type({}):
+        elif isinstance(context, dict):
             _filter['host'] = [context['host']]
-        host = self._do_request('host.get', dict(
-            output=['hostid','host','name','proxy_hostid','status','snmp_error'],
-            filter=_filter,
-            selectParentTemplates=['name','templateid'],
-            selectGroups=['groupid','name'],
-            selectInterfaces=['interfaceid','ip','main','port','type'],
-            selectMacros=['hostmacroid','macro','value'],
-        ))
-        return host
+        return self._do_request('host.get', {
+            'output': ['hostid','host','name','proxy_hostid','status','snmp_error'],
+            'filter': _filter,
+            'selectParentTemplates': ['name','templateid'],
+            'selectGroups': ['groupid','name'],
+            'selectInterfaces': ['interfaceid','ip','main','port','type'],
+            'selectMacros': ['hostmacroid','macro','value'],
+        })
 
-    def get_public_host(self, ip):
-        hosts = self._do_request('host.get', dict(
-            output=['hostid','host','name'],
-            filter={ 'host': [ip] }
-        ))
-        if hosts:
-            for i, host in enumerate(hosts):
-                hosts[i]['url'] = "{0}/latest.php?filter_set=1&show_without_data=1&hostids[]={1}".format(
-                    self.url,
-                    host['hostid']
-                )
-        return hosts
-
-    def add_public_host(self, ip):
-        result = self._do_request('host.create', dict(
-            host=ip,
-            name=ip,
-            proxy_hostid=0,
-            groups=[{'groupid': 74}],
-            interfaces=[{"type": 2, "main": 1, "useip": 1, "ip": ip, "dns": "", "port": 161}],
-            templates=[{'templateid':e} for e in app.config['DEFAULT_TEMPLATEIDS']['default']],
-            status=0,
-            description='Created {0}'.format(datetime.now().strftime('%d-%m-%Y %H:%M:%S'))
-        ))
-        hosts = self.get_public_host(ip)
-        return hosts
 
     def get_all_host(self):
-        hosts = self._do_request('host.get', dict(
-            output=['hostid','host','name']
-        ))
-        return hosts
+        return self._do_request('host.get', {'output': ['hostid','host','name']})
 
-    def sync_host(self, eqm_device, zbx_device):
+
+    def sync_host(self, **kwargs):
         params = {}
+        eqm_device = kwargs.get('eqm_device')
+        if not eqm_device: return params
         eqm_device['zbx_templateids'] = self.get_templates(eqm_device)
         eqm_device['zbx_macros'] = self.get_macros(eqm_device)
         eqm_device['zbx_proxyid'] = self.get_proxy(eqm_device)
         if not eqm_device['device_ip']:
-            raise ZapiAttrException('incorrect attribute device_ip')
+            raise ZapiAttrException('incorrect attribute: device_ip')
+        zbx_device = kwargs.get('zbx_device')
         if zbx_device is None:
             params['host'] = eqm_device['host']
-            params['name'] = u'{0} @{1}'.format(eqm_device['device_name'], eqm_device['host'])
+            params['name'] = '%s @%s' % (eqm_device['device_name'], eqm_device['host'])
             params['proxy_hostid'] = eqm_device['zbx_proxyid']
             params['groups'] = [{'groupid': eqm_device['zbx_groupid']}]
             params['interfaces'] = [{"type": 2, "main": 1, "useip": 1, "ip": eqm_device['device_ip'], "dns": "", "port": 161}]
             params['macros'] = eqm_device['zbx_macros']
             params['templates'] = [{'templateid':e} for e in eqm_device['zbx_templateids']]
-            if eqm_device['monitoring_type'] == app.config['MONITORING_DISABLED']:
+            if eqm_device['monitoring_type'] == self.config.MONITORING_DISABLED:
                 params['status'] = 1
-            params['description'] = 'Created {0}'.format(datetime.now().strftime('%d-%m-%Y %H:%M:%S'))
+            params['description'] = 'Created %s' % datetime.now().strftime('%d-%m-%Y %H:%M:%S')
             self._do_request('host.create', params)
-            app.logger.info('{0} created'.format(eqm_device['host']))
+            logger.info('%s created', eqm_device['host'])
         else:
-            if u'{0} @{1}'.format(eqm_device['device_name'], eqm_device['host']) != zbx_device['name']:
-                params['name'] = u'{0} @{1}'.format(eqm_device['device_name'], eqm_device['host'])
+            if '%s @%s' % (eqm_device['device_name'], eqm_device['host']) != zbx_device['name']:
+                params['name'] = '%s @%s' % (eqm_device['device_name'], eqm_device['host'])
             if eqm_device['zbx_proxyid'] != zbx_device['proxy_hostid']:
                 params['proxy_hostid'] = eqm_device['zbx_proxyid']
-            if eqm_device['monitoring_type'] == app.config['MONITORING_DISABLED']:
+            if eqm_device['monitoring_type'] == self.config.MONITORING_DISABLED:
                 if zbx_device['status'] == 0:
                     params['status'] = 1
             else:
@@ -138,85 +118,79 @@ class Zapi(object):
             (for_add, for_del) = self.check_templates(eqm_device, zbx_device)
             if for_add:
                 params['templates'] = [{'templateid':e} for e in for_add]
-            #if for_del:
-            #    params['templates_clear'] = [{'templateid':e} for e in for_del]
             for_add = self.check_macros(eqm_device, zbx_device)
             if for_add:
                 params['macors'] = for_add
             if params:
                 for k in params:
-                    app.logger.info(u'{0} update {1} "{2}"'.format(eqm_device['host'], k, params[k]))
+                    logger.info('%s update %s "%s"', eqm_device['host'], k, params[k])
                 params['hostid'] = zbx_device['hostid']
-                params['description'] = 'Updated {0}'.format(datetime.now().strftime('%d-%m-%Y %H:%M:%S'))
+                params['description'] = 'Updated %s' % datetime.now().strftime('%d-%m-%Y %H:%M:%S')
                 self._do_request('host.update', params)
                 if 'templates' in params:
                     self.update_items(zbx_device)
-                app.logger.info('{0} updated'.format(eqm_device['host']))
+                logger.info('%s updated', eqm_device['host'])
         return params
 
+
     def update_interface(self, eqm_device, zbx_device):
-        interfaces = []
-        result = self._do_request('hostinterface.update', dict(
-            interfaceid=zbx_device['interfaces'][0]['interfaceid'],
-            ip=eqm_device['device_ip']
-        ))
-        interfaces = [{'interfaceid':e} for e in result['interfaceids']]
-        return interfaces
+        return [{'interfaceid':e} for e in self._do_request(
+            'hostinterface.update', {
+                'interfaceid': zbx_device['interfaces'][0]['interfaceid'],
+                'ip': eqm_device['device_ip']
+        })['interfaceids']]
+
 
     def get_macros(self, eqm_device):
         macros = []
-        if eqm_device['macro_snmp_community']:
-            macros.append({
-                'macro': '{$SNMP_COMMUNITY}',
-                'value': eqm_device['macro_snmp_community']
-            })
-        if eqm_device['macro_icmp_ping_loss_limit']:
-            macros.append({
-                'macro': '{$ICMP_PING_LOSS_LIMIT}',
-                'value': eqm_device['macro_icmp_ping_loss_limit']
-            })
-        if eqm_device['macro_icmp_ping_response_limit']:
-            macros.append({
-                'macro': '{$ICMP_PING_RESPONSE_LIMIT}',
-                'value': eqm_device['macro_icmp_ping_response_limit']
-            })
+        if eqm_device.get('macro_snmp_community'):
+            macros.append({'macro': '{$SNMP_COMMUNITY}',
+                           'value': eqm_device['macro_snmp_community']})
+        if eqm_device.get('macro_icmp_ping_loss_limit'):
+            macros.append({'macro': '{$ICMP_PING_LOSS_LIMIT}',
+                           'value': eqm_device['macro_icmp_ping_loss_limit']})
+        if eqm_device.get('macro_icmp_ping_response_limit'):
+            macros.append({'macro': '{$ICMP_PING_RESPONSE_LIMIT}',
+                           'value': eqm_device['macro_icmp_ping_response_limit']})
         return macros
+
 
     def check_macros(self, eqm_device, zbx_device):
         for_add = []
-        for l in eqm_device['zbx_macros']:
+        for l in eqm_device.get('zbx_macros', []):
             try:
                 index = [e['macro'] for e in zbx_device['macros']].index(l['macro'])
                 if l['value'] != zbx_device['macros'][index]['value']:
-                    self._do_request('usermacro.update', dict(
-                        hostmacroid = zbx_device['macros'][index]['hostmacroid'],
-                        value       = l['value']
-                    ))
+                    self._do_request('usermacro.update', {
+                        'hostmacroid': zbx_device['macros'][index]['hostmacroid'],
+                        'value': l['value']
+                    })
             except ValueError:
-                if l['macro'] in [m['macro'] for m in app.config['DEFAULT_MACROSES']]:
-                    index = [e['macro'] for e in app.config['DEFAULT_MACROSES']].index(l['macro'])
-                    if l['value'] != app.config['DEFAULT_MACROSES'][index]['value']:
-                        for_add.append({'hostmacroid': self._do_request('usermacro.create', dict(
-                            hostid = zbx_device['hostid'],
-                            macro  = l['macro'],
-                            value  = l['value']
-                        ))['hostmacroids'][0]})
+                if l['macro'] in [m['macro'] for m in self.config.DEFAULT_MACROSES]:
+                    index = [e['macro'] for e in self.config.DEFAULT_MACROSES].index(l['macro'])
+                    if l['value'] != self.config.DEFAULT_MACROSES[index]['value']:
+                        for_add.append({'hostmacroid': self._do_request('usermacro.create', {
+                            'hostid': zbx_device['hostid'],
+                            'macro': l['macro'],
+                            'value': l['value']
+                        })['hostmacroids'][0]})
                 else:
-                    for_add.append({'hostmacroid': self._do_request('usermacro.create', dict(
-                        hostid = zbx_device['hostid'],
-                        macro  = l['macro'],
-                        value  = l['value']
-                    ))['hostmacroids'][0]})
+                    for_add.append({'hostmacroid': self._do_request('usermacro.create', {
+                        'hostid': zbx_device['hostid'],
+                        'macro': l['macro'],
+                        'value': l['value']
+                    })['hostmacroids'][0]})
         return for_add
+
 
     def get_templates(self, eqm_device):
         zbx_templateids = []
-        if eqm_device['monitoring_type'] == app.config['MONITORING_ICMP']:
-            zbx_templateids = app.config['MONITORING_ICMP_TEMPLATEIDS'][eqm_device['driver']]
-        elif not eqm_device['monitoring_type']:
-            zbx_templateids = app.config['MONITORING_ICMP_TEMPLATEIDS'][eqm_device['driver']]
-        elif not eqm_device['zbx_templateids']:
-            zbx_templateids = app.config['DEFAULT_TEMPLATEIDS'][eqm_device['driver']]
+        if eqm_device.get('monitoring_type') == self.config.MONITORING_ICMP:
+            zbx_templateids = self.config.MONITORING_ICMP_TEMPLATEIDS[eqm_device['driver']]
+        elif not eqm_device.get('monitoring_type'):
+            zbx_templateids = self.config.MONITORING_ICMP_TEMPLATEIDS[eqm_device['driver']]
+        elif not eqm_device.get('zbx_templateids'):
+            zbx_templateids = self.config.DEFAULT_TEMPLATEIDS[eqm_device['driver']]
         else:
             try:
                 zbx_templateids = [int(e) for e in eqm_device['zbx_templateids'].split(',')]
@@ -224,12 +198,12 @@ class Zapi(object):
                 zbx_templateids = eqm_device['zbx_templateids']
         return zbx_templateids
 
+
     def check_templates(self, eqm_device, zbx_device):
         for_add = []
         for_del = []
-        for l in eqm_device['zbx_templateids']:
+        for l in eqm_device.get('zbx_templateids', []):
             if l not in [t['templateid'] for t in zbx_device['parentTemplates']]:
-                #for_add.append(int(l))
                 for_add = eqm_device['zbx_templateids']
                 break
         for r in [t['templateid'] for t in zbx_device['parentTemplates']]:
@@ -237,36 +211,37 @@ class Zapi(object):
                 for_del.append(r)
         return (for_add, for_del)
 
+
     def get_triggers(self, seconds):
-        return self._do_request('trigger.get', dict(
-            lastChangeSince=int(time())-seconds,
-            #filter={'value':1},
-            output=['description','lastchange','priority','triggerid','value'],
-            selectHosts=['hostid','host','name'],
-            sortfield='lastchange',
-            sortorder='DESC',
-            expandDescription=True
-        ))
+        return self._do_request('trigger.get', {
+            'lastChangeSince': int(time()) - seconds,
+            'output': ['description','lastchange','priority','triggerid','value'],
+            'selectHosts': ['hostid','host','name'],
+            'sortfield': 'lastchange',
+            'sortorder': 'DESC',
+            'expandDescription': True
+        })
+
 
     def update_items(self, zbx_device):
         result = []
-        items = self._do_request('item.get', dict(
-            host=zbx_device['host'],
-            output=['itemid','name','templateid','status'],
-            selectItemDiscovery=['parent_itemid']
-        ))
+        items = self._do_request('item.get', {
+            'host': zbx_device['host'],
+            'output': ['itemid','name','templateid','status'],
+            'selectItemDiscovery': ['parent_itemid']
+        })
         parent_itemids = []
         for item in items:
             try: parent_itemids.append(item['itemDiscovery']['parent_itemid'])
-            except: pass
+            except Exception: pass
         parent_itemids = list(set(parent_itemids))
         itemprototypes = []
         if parent_itemids:
-            itemprototypes = self._do_request('itemprototype.get', dict(
-                itemids=parent_itemids,
-                output=['itemid'],
-                inherited=True,
-            ))
+            itemprototypes = self._do_request('itemprototype.get', {
+                'itemids': parent_itemids,
+                'output': ['itemid'],
+                'inherited': True,
+            })
         for item in items:
             try:
                 if item['itemDiscovery']['parent_itemid'] in [e['itemid'] for e in itemprototypes]:
@@ -275,19 +250,20 @@ class Zapi(object):
                 else:
                     if item['status'] == '0':
                         result.append({'itemid': item['itemid'], 'status': 1})
-            except:
+            except Exception:
                 if item['templateid'] != '0':
                     if item['status'] == '1':
                         result.append({'itemid': item['itemid'], 'status': 0})
                 else:
                     if item['status'] == '0':
                         result.append({'itemid': item['itemid'], 'status': 1})
-        if result:
-            self._do_request('item.update', result)
+        if result: self._do_request('item.update', result)
         return result
 
+
     def get_items(self, host):
-        return self.update_items({'host':host})
+        return self.update_items({'host': host})
+
 
     def get_proxy(self, eqm_device):
         if eqm_device['zbx_master_proxyid'] in self.proxys_offline:
@@ -295,139 +271,188 @@ class Zapi(object):
                 return eqm_device['zbx_slave_proxyid']
         return eqm_device['zbx_master_proxyid']
 
+
     def delete_host(self, hostid):
         return self.conn.host.delete(hostid)
 
-    def get_link_latest(self, id=0, ip='', **kwargs):
-        hostids = []
-        if id:
-            hostids = self._do_request('host.get', dict(
-                output=['hostid','host'],
-                filter={ 'host': [id] }
-            ))
-        elif ip:
-            hostids = self._do_request('hostinterface.get', dict(
-                output=['hostid','host'],
-                filter={ 'ip': [ip] }
-            ))
-        if hostids:
-            return "{0}/latest.php?filter_set=1&show_without_data=1&hostids[]={1}".format(self.url, hostids[0]['hostid'])
-        else:
-            return "{0}/search.php?search={0}".format(self.url, id)
 
-    def get_items_history(self, host, key='icmpping', time_from=0, time_till=0, period=3600,
-                          workonly=False, offset=0, weekdays=[], from_hour=9, till_hour=18, **kwargs):
-        result = dict(
-            host=host, key=key, workonly=workonly, offset=offset,
-            time_from=time_from, time_till=time_till, period=period,
-            items=[], weekdays=weekdays, from_hour=9, till_hour=18
-        )
-        zhost = self._do_request('host.get', dict(
-            output=['hostid', 'snmp_available', 'snmp_error'],
-            filter={ 'host': [host] }
-        ))
-        if not zhost: return result
-        result.update(zhost[0])
-        items = DataFrame(self._do_request('item.get', dict(
-            output=['hostid','itemid','name','key_','value_type','lastclock','lastvalue'],
-            hostids=[h['hostid'] for h in zhost]
-        )))
-        items = items[items.key_.str.contains(key, regex=True, na=False)]
-        if items.empty: return result
-        if time_from and time_till:
-            result['period'] = time_till-time_from
+    def get_items_history(self, **kwargs):
+        zhost = self._do_request('host.get', {
+            'output': ['hostid', 'snmp_available', 'snmp_error'],
+            'filter': {'host': [kwargs.get('host', 0)]}
+        })
+        if not zhost: return kwargs
+        kwargs.update(zhost[0])
+        items = DataFrame(self._do_request('item.get', {
+            'output': ['hostid','itemid','name','key_','value_type','lastclock','lastvalue'],
+            'hostids': [h['hostid'] for h in zhost]
+        }))
+        items = items[items.key_.str.contains(
+            kwargs.get('key', 'icmpping'), regex=True, na=False)]
+        if items.empty: return kwargs
+        if kwargs.get('time_from') and kwargs.get('time_till'):
+            kwargs['period'] = kwargs['time_till'] - kwargs['time_from']
             for index, item in items.iterrows():
-                history = DataFrame(self._do_request('history.get', dict(
-                    history = item['value_type'],
-                    itemids = [item['itemid']],
-                    time_from = time_from,
-                    time_till = time_till,
-                    sortfield = "clock"
-                )))
+                history = DataFrame(self._do_request('history.get', {
+                    'history': item['value_type'],
+                    'itemids': [item['itemid']],
+                    'time_from': kwargs['time_from'],
+                    'time_till': kwargs['time_till'],
+                    'sortfield': "clock"
+                }))
                 if history.empty: continue
                 history.clock = to_numeric(history.clock, errors='coerce')
                 history.value = to_numeric(history.value, errors='coerce')
-                #if offset: history.clock = history.clock + int(offset)
-                if workonly:
+                if kwargs.get('workonly', []):
                     history = history.loc[history['clock'].isin(
-                        filterWorkTimestamp(history.clock.tolist(), offset, weekdays, from_hour, till_hour)
+                        Zapi.filterWorkTimestamp(history.clock.tolist(), **kwargs)
                     )]
-                #print history
                 items.set_value(index, 'max', history.value.max())
                 items.set_value(index, 'min', history.value.min())
                 items.set_value(index, 'avg', history.value.mean())
-        result['items'] = items.fillna(0).to_dict(orient='records')
-        return result
+        kwargs['items'] = items.fillna(0).to_dict(orient='records')
+        return kwargs
 
-    def get_chart_cached(self, host, key='icmpping', time_from=0, time_till=0, stime=0, period=3600, width=1000, **kwargs):
-        items = DataFrame(self._do_request('item.get', dict(
-            output=['hostid','itemid','name','key_'],
-            hostids=[h['hostid'] for h in self._do_request('host.get', dict(output=['hostid'], filter={ 'host': [host] }))]
-        )))
-        items = items[items.key_.str.contains(key, regex=True, na=False)]
-        if items.empty: return 'static/images/fake_chart.png'
-        if (time_till and time_from):
-            stime = datetime.utcfromtimestamp(float(time_from)).strftime("%Y%m%d%H%M%S")
-            period = int(time_till)-int(time_from)
-        params = [
-            'period=%d' % period,
-            '&'.join(['itemids[%s]=%s' % (i,i) for i in items['itemid'].tolist()]),
-            'type=0',
-            'batch=1',
-            'updateProfile=0',
-            'width=850',
-            'height=180'
-        ]
-        print('&'.join(params))
-        if stime: params.append('stime=%s' % stime)
-        filename = '%s_%s_%s_%s.png' % (host, ''.join([str(i) for i in items['itemid'].tolist()]), time_from, time_till)
-        with requests.session() as c:
-            c.post('{0}/index.php?login=1'.format(self.url), verify=False, data={
-                'name': self.username,
-                'password': self.password,
+
+    @staticmethod
+    def filterWorkTimestamp(timestamps, **kwargs):
+        filtered = []
+        for t in timestamps:
+            dt = datetime.utcfromtimestamp(float(t + kwargs.get('offset', 0)))
+            if (dt.isoweekday() in kwargs.get('weekdays', [])) \
+                    and (dt.hour >= kwargs.get('from_hour', 9) and \
+                         dt.hour < kwargs.get('till_hour', 18)):
+                filtered.append(t)
+        return filtered
+
+
+    def get_chart_cached(self, **kwargs):
+        items = DataFrame(self._do_request('item.get', {
+            'output': ['hostid','itemid','name','key_'],
+            'hostids': [h['hostid'] for h in self._do_request(
+                'host.get', {
+                    'output': ['hostid'],
+                    'filter': {'host': [kwargs.get('host', 0)]}
+                })]
+        }))
+        items = items[items.key_.str.contains(
+            kwargs.get('key', 'icmpping'), regex=True, na=False)]
+        if items.empty:
+            return os.path.join(
+                self.config.BASE_DIR, 'app', 'static', 'images', 'fake_chart.png')
+        if kwargs.get('time_from') and kwargs.get('time_till'):
+            kwargs['stime'] = datetime.utcfromtimestamp(float(kwargs['time_from']))\
+                .strftime("%Y%m%d%H%M%S")
+            kwargs['period'] = kwargs['time_till'] - kwargs['time_from']
+        with requests.session() as session_:
+            session_.post('%s/index.php' % self.config.ZABBIX_URL, verify=False, data={
+                'name': self.config.ZABBIX_USER,
+                'password': self.config.ZABBIX_PASS,
                 'enter': 'Sign in',
                 'autologin': '1',
                 'request': ''
+            }, params={'login': 1})
+            response = session_.get('%s/chart.php' % self.config.ZABBIX_URL, params={
+                'period': kwargs.get('period', 3600),
+                'stime': kwargs.get('stime', 0),
+                'type': 0,
+                'batch': 1,
+                'updateProfile': 0,
+                'width': 850,
+                'height': 180,
+                **{'itemids[%s]' % i: i for i in items['itemid'].tolist()}
             })
-            r = c.get('{0}/chart.php?{1}'.format(self.url, '&'.join(params)))
-            with open('%s/app/static/images/%s' % (app.config['BASE_DIR'], filename), 'wb') as img:
-                img.write(r.content)
-        return 'static/images/%s' % filename
+            bio = BytesIO(response.content)
+            bio.name = 'image.png'
+            return bio
 
 
-def sync_by_device_id(device_id):
-    timestamp = int(time())
-    if not device_id or not device_id.isdigit():
-        return dict(error = 'incorrect argument device_id',
-                    timestamp = timestamp)
-    error = 'ok'
-    eqm_device = None
-    zbx_device = None
-    params = []
-    try:
-        eqm_device = dbexecute(
-            app.config['SQL_SELECT_DEVICES'].format('and d.device_id = %s' % device_id)
-        )
-        if eqm_device.empty:
-            eqm_device = None
-        else:
-            eqm_device = eqm_device.to_dict(orient='records')[0]
+    def sync_by_device_id(self, **kwargs):
+        kwargs['timestamp'] = int(time())
+        kwargs['error'] = 'ok'
+        kwargs['eqm_device'] = None
+        kwargs['zbx_device'] = None
+        kwargs['params'] = []
+        if not kwargs.get('device_id') or \
+                not isinstance(kwargs.get('device_id'), int):
+            kwargs['error'] = 'incorrect argument: device_id'
+            return kwargs
+        try:
+            kwargs['eqm_device'] = dbexecute(
+                self.config.SQL_SELECT_DEVICES\
+                .format('and d.device_id = %s' % kwargs['device_id']), current_app)
+            if not kwargs['eqm_device'].empty:
+                kwargs['eqm_device'] = kwargs['eqm_device'].to_dict(orient='records')[0]
+                try:
+                    from .rabbitmq import Publisher
+                    Publisher().check_process(**kwargs)
+                except Exception as err:
+                    logger.error(repr(err))
+                kwargs['zbx_device'] = self.get_host(kwargs['eqm_device'])
+                if len(kwargs['zbx_device']):
+                    kwargs['zbx_device'] = kwargs['zbx_device'][0]
+                kwargs['params'] = self.sync_host(**kwargs)
+        except Exception as err:
+            kwargs['error'] = repr(err)
+            logger.error('%s %s', kwargs['device_id'], repr(err))
+        return kwargs
+
+
+    def get_public_host(self, **kwargs):
+        kwargs['devices'] = self._do_request('host.get', {
+            'output': ['hostid','host','name'],
+            'filter': {'host': [kwargs['ip']]}
+        })
+        for i, host in enumerate(kwargs['devices']):
+            kwargs['devices'][i]['url'] = "%s/latest.php?filter_set=1&show_without_data=1&hostids[]=%s" \
+                % (self.config.ZABBIX_URL, host['hostid'])
+        return kwargs
+
+
+    def add_public_host(self, **kwargs):
+        kwargs['timestamp'] = int(time())
+        kwargs['error'] = 'ok'
+        kwargs['devices'] = None
+        if not kwargs.get('ip'):
+            kwargs['error'] = 'incorrect argument: ip'
+            return kwargs
+        kwargs.update(self.get_public_host(**kwargs))
+        if not kwargs['devices']:
             try:
-                rabbitmq.Publisher().check_process(eqm_device, timestamp)
-            except Exception as e:
-                app.logger.error(repr(e))
-            zbx = Zapi()
-            zbx_device = zbx.get_host(eqm_device)
-            if len(zbx_device):
-                zbx_device = zbx_device[0]
-            else:
-                zbx_device = None
-            params = zbx.sync_host(eqm_device, zbx_device)
-    except Exception as err:
-        app.logger.error('%s %s' % (device_id, repr(err)))
-        error = repr(err)
-    return dict(eqm_device = eqm_device,
-                zbx_device = zbx_device,
-                error = error,
-                params = params,
-                timestamp = timestamp)
+                self._do_request('host.create', {
+                    'host': kwargs['ip'],
+                    'name': kwargs['ip'],
+                    'proxy_hostid': 0,
+                    'groups': [{'groupid': 74}],
+                    'interfaces': [{"type": 2, "main": 1, "useip": 1,
+                                    "ip": kwargs['ip'], "dns": "", "port": 161}],
+                    'templates': [{'templateid':e} for e in self.config.DEFAULT_TEMPLATEIDS['default']],
+                    'status': 0,
+                    'description': 'Created %s' % datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+                })
+                kwargs.update(self.get_public_host(**kwargs))
+            except Exception as err:
+                kwargs['error'] = repr(err)
+                logger.error(repr(err))
+        return kwargs
+
+
+    def get_link_latest(self, **kwargs):
+        hostids = []
+        key = 'id'
+        if kwargs.get('id') and isinstance(kwargs.get('id'), int):
+            hostids = self._do_request('host.get', {
+                'output': ['hostid','host'],
+                'filter': { 'host': [kwargs.get('id')] }
+            })
+        elif kwargs.get('ip') and isinstance(kwargs.get('ip'), str):
+            key = 'ip'
+            hostids = self._do_request('hostinterface.get', {
+                'output': ['hostid','host'],
+                'filter': { 'ip': [kwargs.get('ip')] }
+            })
+        return "%s/latest.php?filter_set=1&show_without_data=1&hostids[]=%s" \
+            % (self.config.ZABBIX_URL, hostids[0]['hostid']) \
+            if hostids else \
+            "%s/search.php?search=%s" \
+            % (self.config.ZABBIX_URL, kwargs.get(key))

@@ -155,19 +155,19 @@
           <td>Частота</td>
           <td>Ширина полосы</td>
           <td>Кол-во CPE, расчетное</td>
-          <td>Кол-во CPE, среднее</td>
+          <td>Кол-во CPE, макс.</td>
           <td>Утил. CPE, %</td>
           <td>Расчетная нагрузка, Mbps</td>
           <td>Средняя нагрузка по UL, Mbps</td>
           <td>Макс. нагрузка по UL, Mbps</td>
           <td>Средняя нагрузка по DL, Mbps</td>
           <td>Макс. нагрузка по DL, Mbps</td>
-          <td>Утил. по UL, %</td>
-          <td>Макс. утил. по UL, %</td>
           <td>Утил. по DL, %</td>
           <td>Макс. утил. по DL, %</td>
-          <td>Утил. по ULDL, %</td>
-          <td>Макс. утил. по ULDL, %</td>
+          <td>Утил. по UL, %</td>
+          <td>Макс. утил. по UL, %</td>
+          <td>Утил. по DLUL, %</td>
+          <td>Макс. утил. по DLUL, %</td>
           <td></td>
         </tr>
       </thead>
@@ -175,7 +175,7 @@
     </table>
   </div>
 </div>
-<br><br><br>
+
 <script type="text/javascript">
   function addItem(parentUL, branch, parentId) {
       for (var key in branch.children) {
@@ -333,7 +333,6 @@
             if (type === 'display') {
               data = '<div class="btn-group" role="group">'+
                      '<button id="ip_addr" type="button" class="btn btn-outline-success custom details-control">'+row.ip_addr+'</button>'+
-                     //'<button type="button" class="btn btn-outline-success details-control">G</button>'+
                      '<a target="_blank" class="btn btn-outline-danger" href="{{ url_for('api.redirect_latest') }}?id='+row.device_id+'">Z</a>'+
                      '</div>';
             }
@@ -380,24 +379,9 @@
   function getWeekDays() {
     var result = [];
     $('#weekdays option:checked').each(function() {
-      result.push($(this).val());
+      result.push(parseInt($(this).val()));
     });
     return result;
-  }
-
-  function getItemsHistoryUrl(d) {
-    var urlparams = [
-      '{{ url_for('api.itemhistory') }}?host='+d.device_id,
-      'time_from='+time_from/1000,
-      'time_till='+time_till/1000,
-      'key=interface.radio.(inSpeed|outSpeed|cpeCount)|989.1.16.2.6.3.4.1.2',
-      'workonly='+workonly,
-      'weekdays=['+weekdays+']',
-      'from_hour='+from_hour,
-      'till_hour='+till_hour,
-      'offset='+offset
-    ];
-    return encodeURI(urlparams.join('&'));
   }
 
   function format ( d ) {
@@ -485,12 +469,17 @@
       async: true,
       dataType: 'json',
       success:function(data) {
-        table.order([0, 'asc']);
-        table.clear().draw();
-        table.rows.add(data.get_devices);
-        table.columns.adjust().draw();
-        in_progress = false;
-        getZabbixData();
+        if (data.get_devices.length > 0) {
+          table.order([0, 'asc']);
+          table.clear().draw();
+          table.rows.add(data.get_devices);
+          table.columns.adjust().draw();
+          in_progress = false;
+          getZabbixData();
+        } else {
+          checkProgress(1);
+          alert('Устройства в данных группах не найдены');
+        }
       },
       error:function(xhr, status, error) {
         console.error(error);
@@ -548,7 +537,7 @@
     var item = searchItem('cpeCount|989.1.16.2.6.3.4.1.2', data.items);
     if (!item) { setError(r, 'нет опроса "Количество CPE"'); }
     else {
-      setUtil(r, 'cpecount', 'cpeutil', item.avg, getCell(r, 'l_cpe'), l_cpeutil, 'Количество CPE', 1);
+      setUtil(r, 'cpecount', 'cpeutil', item.max, getCell(r, 'l_cpe'), l_cpeutil, 'Количество CPE', 1);
     }
     var dt_name = getCell(r, 'dt_name');
     if (dt_name.match(/revolution|cambium|ubiquiti/i)) {
@@ -597,9 +586,23 @@
 
   function getZabbixData() {
     table.rows().every(function(rowIdx, tableLoop, rowLoop) {
-      var row = this.data();
+      let row = this.data();
       $.ajax({
-        url: getItemsHistoryUrl(row),
+        type: "POST",
+        url: "{{ url_for('api.itemhistory') }}",
+        data: JSON.stringify({
+          'host': row.device_id,
+          'time_from': time_from/1000,
+          'time_till': time_till/1000,
+          'key': 'interface.radio.(inSpeed|outSpeed|cpeCount)|989.1.16.2.6.3.4.1.2',
+          'workonly': workonly,
+          'weekdays': weekdays,
+          'from_hour': from_hour,
+          'till_hour': till_hour,
+          'offset': offset
+        }),
+        contentType: "application/json; charset=utf-8",
+        dataType: 'json',
         async: true,
         success: function(data) {
           calculateSectorLoad(data, rowIdx);
@@ -623,4 +626,5 @@
     }
   });
 </script>
+
 {% endblock %}
