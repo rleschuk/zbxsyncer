@@ -4,7 +4,6 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-from config import config
 config_name = os.getenv('FLASK_CONFIG') or 'default'
 
 from app import create_app

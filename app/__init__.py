@@ -43,14 +43,14 @@ def create_app(config_name):
                 if handler: return tuple(handler.values())[0]
 
     @app.errorhandler(400)
-    def not_found(error):
+    def bad_request(error):
         handler = get_handler(400)
         return handler(error) if handler else Response('bad request', 400)
 
     @app.errorhandler(403)
-    def not_found(error):
+    def forbidden(error):
         handler = get_handler(403)
-        return handler(error) if handler else Response('forbidden', 404)
+        return handler(error) if handler else Response('forbidden', 403)
 
     @app.errorhandler(404)
     def not_found(error):
