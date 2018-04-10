@@ -62,7 +62,7 @@ class Publisher(object):
 class Consumer(threading.Thread):
 
     def __init__(self, consumer_name, config=None):
-        self.consumer_name = 'Consumer - %s' % consumer_name
+        self.consumer_name = 'Consumer-%s' % consumer_name
         self.config = config_[os.getenv('FLASK_CONFIG', 'default')] \
             if config is None else config
         self.connection = None

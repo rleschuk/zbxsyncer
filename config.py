@@ -141,7 +141,7 @@ class DevelopmentConfig(Config):
         {0}
         --and rownum <= 10000
     """
-    RABBITMQ_CONSUMERS = 4
+    RABBITMQ_CONSUMERS = 1
 
 
 class TestingConfig(Config):

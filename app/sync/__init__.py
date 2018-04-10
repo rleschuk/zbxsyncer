@@ -10,7 +10,8 @@ from ..libs import zapi
 from ..libs import datapi
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from atexit import register
+from apscheduler.schedulers import SchedulerNotRunningError
+
 
 class Syncer(object):
 
@@ -53,8 +54,12 @@ class Syncer(object):
         self.scheduler.start()
         logger.info('scheduler started')
 
-        register(self.save_exit)
-        logger.info('atexit register save_exit')
+        try:
+            import uwsgi
+            uwsgi.atexit = self.cleanup
+        except ImportError:
+            import atexit
+            atexit.register(self.cleanup)
 
 
     def sync_all(self):
@@ -104,10 +109,11 @@ class Syncer(object):
             consumer.zbx.init_proxy()
 
 
-    def save_exit(self):
-        for consumer in self.consumers: consumer.shutdown()
+    def cleanup(self):
+        for consumer in self.consumers:
+            consumer.shutdown()
         try:
             self.scheduler.shutdown()
             logger.info('scheduler has been shut down')
-        except Exception as err:
-            logger.error('save exit error: %s', repr(err))
+        except SchedulerNotRunningError:
+            pass

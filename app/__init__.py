@@ -41,6 +41,8 @@ def create_app(config_name):
             if bp.url_prefix and path.startswith(bp.url_prefix):
                 handler = app.error_handler_spec.get(bp_name, {}).get(code)
                 if handler: return tuple(handler.values())[0]
+        handler = app.error_handler_spec.get('main', {}).get(code)
+        if handler: return tuple(handler.values())[0]
 
     @app.errorhandler(400)
     def bad_request(error):
