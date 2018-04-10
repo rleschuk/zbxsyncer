@@ -148,6 +148,7 @@ class TestingConfig(Config):
     FLASHES = [('Testing mode','warning')]
     TESTING = True
     SQLALCHEMY_DATABASE_URI = os.environ['TEST_DATABASE_URL']
+    RABBITMQ_CONSUMERS = 1
 
 
 class ProductionConfig(Config):
