@@ -16,12 +16,14 @@ def create_app(config_name):
     config[config_name].init_app(app)
 
     db.init_app(app)
-    syncer.init_app(app)
+    if app.config['WITH_SYNC']:
+        syncer.init_app(app)
 
     formatter = logging.Formatter(app.config['LOG_FORMAT'])
     handler = RotatingFileHandler(app.config['LOG_FILENAME'],
         maxBytes=10000000, backupCount=5)
     app.logger.addHandler(handler)
+    app.logger.setLevel(app.config['LOG_LEVEL'])
     for h in app.logger.handlers:
         h.setLevel(app.config['LOG_LEVEL'])
         h.setFormatter(formatter)

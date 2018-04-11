@@ -37,6 +37,7 @@ class Config:
     # operations using the other.
     THREADS_PER_PAGE = 5
 
+    WITH_SYNC = True
     # RabbitMQ configuration
     RABBITMQ_HOST = os.environ.get('RABBITMQ_HOST') or 'localhost'
     RABBITMQ_USER = os.environ.get('RABBITMQ_USER') or 'guest'
@@ -109,8 +110,8 @@ class Config:
 
 class DevelopmentConfig(Config):
     FLASHES = [('Development mode','warning')]
-    DEBUG = True
-    LOG_LEVEL = 'DEBUG'
+    #DEBUG = True
+    #LOG_LEVEL = 'DEBUG'
     SQLALCHEMY_DATABASE_URI = os.environ['DEV_DATABASE_URL']
     SQL_SELECT_DEVICES = """
     select
@@ -142,6 +143,7 @@ class DevelopmentConfig(Config):
         --and rownum <= 10000
     """
     RABBITMQ_CONSUMERS = 1
+    #WITH_SYNC = False
 
 
 class TestingConfig(Config):
