@@ -16,6 +16,12 @@ def bs_load():
     return render_template('bs_load.html')
 
 
+@reports.route('/rrl_load', methods=['GET'])
+def rrl_load():
+    for f in current_app.config['FLASHES']: flash(*f)
+    return render_template('rrl_load.html')
+
+
 @reports.route('/get_devices/<key>', methods=['GET'])
 def get_devices(key):
     try: query = QUERY[key].format(**request.args.to_dict())

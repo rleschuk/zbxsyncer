@@ -142,8 +142,9 @@ class DevelopmentConfig(Config):
         {0}
         --and rownum <= 10000
     """
-    RABBITMQ_CONSUMERS = 1
+    RABBITMQ_CONSUMERS = 0
     #WITH_SYNC = False
+    TEMPLATES_AUTO_RELOAD = True
 
 
 class TestingConfig(Config):

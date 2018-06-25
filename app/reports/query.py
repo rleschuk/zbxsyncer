@@ -46,5 +46,42 @@ QUERY = {
                 os_eqm.grp_utils.f_get_group_name(ds_dgrp.par_group_id),
                 os_eqm.grp_utils.f_get_group_name(dig.device_group_id),
                 rdv.device_name) devs
+    ''',
+    'rrl_load': '''
+        select rownum, devs.* from
+            (select
+                dig.device_id,
+                dig.device_group_id,
+                regs.enf_region_name as region,
+                os_eqm.grp_utils.f_get_group_name(ds_dgrp.par_group_id) as city,
+                os_eqm.grp_utils.f_get_group_name(dig.device_group_id) as full_bs_name,
+                rdv.device_name,
+                rdv.dc_name,
+                rdv.dt_name,
+                rdv.ip_addr as ip_addr,
+                null as uplink,
+                null as downlink,
+                null as maxuplink,
+                null as maxdownlink,
+                null as snmp_available,
+                null as error
+            from
+                device_in_groups dig
+                inner join root_devices_view rdv on dig.device_id = rdv.device_id and rdv.dc_name = 'RRS rrl' and rdv.ip_addr is not null
+                left join os_eqm.device_groups ds_dgrp on ds_dgrp.device_group_id = dig.device_group_id
+                left join (select header_id, enf_region_name from os_eqm.groups_86
+                           left join os_usr.lst_regions_enf on region_enforty = rec_id) regs on regs.header_id = ds_dgrp.par_group_id
+            where
+                dig.device_group_id in (
+                    select device_group_id from os_eqm.device_groups
+                    connect by prior device_group_id = nvl(par_group_id, 0)
+                    start with device_group_id in ({groups})
+                )
+                --and regexp_like(rdv.device_name,'^(rrl)', 'i')
+            order by
+                regs.enf_region_name,
+                os_eqm.grp_utils.f_get_group_name(ds_dgrp.par_group_id),
+                os_eqm.grp_utils.f_get_group_name(dig.device_group_id),
+                rdv.device_name) devs
     '''
 }

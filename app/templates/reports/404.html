@@ -1,7 +1,6 @@
 {% extends 'layout.html' %}
 {% block title %}Отчеты{% endblock %}
 {% block body %}
-<h3>
-  <a href="{{ url_for('reports.bs_load', _external=True) }}">Отчет по загрузке секторов БС</a>
-</h3>
+<h3><a href="{{ url_for('reports.bs_load', _external=True) }}">Отчет по загрузке секторов БС</a></h3>
+<h3><a href="{{ url_for('reports.rrl_load', _external=True) }}">Отчет по загрузке РРЛ</a></h3>
 {% endblock %}
