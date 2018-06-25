@@ -158,10 +158,10 @@
           <td>Кол-во CPE, макс.</td>
           <td>Утил. CPE, %</td>
           <td>Расчетная нагрузка, Mbps</td>
-          <td>Средняя нагрузка по UL, Mbps</td>
-          <td>Макс. нагрузка по UL, Mbps</td>
           <td>Средняя нагрузка по DL, Mbps</td>
           <td>Макс. нагрузка по DL, Mbps</td>
+          <td>Средняя нагрузка по UL, Mbps</td>
+          <td>Макс. нагрузка по UL, Mbps</td>
           <td>Утил. по DL, %</td>
           <td>Макс. утил. по DL, %</td>
           <td>Утил. по UL, %</td>
@@ -255,7 +255,7 @@
     return selected_groups;
   }
 
-  $.ajaxSetup({cache:false});
+  //$.ajaxSetup({cache:false});
   $.getJSON("{{ url_for('static', filename='groups.json') }}", function(json) {
     addItem($('#root'), json);
     $(':checkbox').click(function() {

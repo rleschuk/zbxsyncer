@@ -424,7 +424,7 @@ class Zapi(object):
                     'host': kwargs['ip'],
                     'name': kwargs['ip'],
                     'proxy_hostid': 0,
-                    'groups': [{'groupid': 74}],
+                    'groups': [{'groupid': 73}],
                     'interfaces': [{"type": 2, "main": 1, "useip": 1,
                                     "ip": kwargs['ip'], "dns": "", "port": 161}],
                     'templates': [{'templateid':e} for e in self.config.DEFAULT_TEMPLATEIDS['default']],

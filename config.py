@@ -35,7 +35,7 @@ class Config:
     # using 2 per available processor cores - to handle
     # incoming requests using one and performing background
     # operations using the other.
-    THREADS_PER_PAGE = 5
+    THREADS_PER_PAGE = 15
 
     WITH_SYNC = True
     # RabbitMQ configuration

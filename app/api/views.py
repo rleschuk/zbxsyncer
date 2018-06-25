@@ -7,6 +7,26 @@ from . import api
 from app.utils import json_converter, json_loads, format_data
 from app.libs.zapi import Zapi
 
+from collections import deque
+
+class memorize_itemhistory(object):
+    def __init__(self, function):
+        self._function = function
+        self._deque = deque([], 1000)
+
+    @property
+    def __name__(self):
+        return self._function.__name__
+
+    def __call__(self, *args, **kwargs):
+        req = request.get_json()
+        cache = tuple(zip(*self._deque))
+        if not cache or req not in cache[0]:
+            response = self._function(*args, **kwargs)
+            self._deque.append((req, response))
+        else:
+            response = cache[1][cache[0].index(req)]
+        return response
 
 # get app configuration
 @api.route('/', methods=['GET'])
@@ -41,6 +61,7 @@ def redirect_latest():
 
 
 @api.route('/itemhistory', methods=['POST'])
+@memorize_itemhistory
 def itemhistory():
     return jsonify(
         Zapi().get_items_history(**format_data(request.get_json())))
